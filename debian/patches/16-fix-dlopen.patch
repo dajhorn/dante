@@ -1,0 +1,29 @@
+Description: Fix socksify failure to run
+ Path to dlopen.so is no longer hardcoded but searched
+ for in potential library paths
+
+ The logic used may lead to incorrect results on systems
+ where multiarch packages are present but is not of any
+ concern when built using buildd
+Author: Louis Bouchard <louis.bouchard@ubuntu.com>
+Bug-Ubuntu: https://bugs.launchpad.net/bugs/857598
+---
+--- a/configure
++++ b/configure
+@@ -29644,6 +29644,16 @@
+ 		    fi
+ 		;;
+ 
++                *linux*)
++		LIBDL_NAME=`ls /usr/lib/libdl.so* /lib/libdl.so* /lib/*/libdl.so* | sed -e 's/.*\///' | sort -nr | head -n 1`
++		if test "x${LIBDL_NAME}" = x; then
++			#nothing found, set to libdl.so anyway
++			LIBDL_NAME="${base_library_path}libdl.so"
++		fi
++		LIBRARY_DLOPEN=`ls /usr/lib/${LIBDL_NAME}* /lib/${LIBDL_NAME}* /lib/*/${LIBDL_NAME}*`
++
++		;;
++
+ 		*)
+ 		    LIBRARY_DLOPEN="${base_library_path}libdl.${SOLIB_POSTFIX}"
+ 		;;

@@ -1,0 +1,25 @@
+Do not invent our own users for dante-server, use "proxy" and "nobody".
+
+--- a/example/sockd.conf
++++ b/example/sockd.conf
+@@ -77,15 +77,15 @@
+ #
+ 
+ # when doing something that can require privilege, it will use the
+-# userid "sockd".
+-#user.privileged: sockd
++# userid:
++user.privileged: proxy
+ 
+-# when running as usual, it will use the unprivileged userid of "sockd".
+-#user.notprivileged: sockd
++# when running as usual, it will use the unprivileged userid of:
++user.notprivileged: nobody
+ 
+ # If you compiled with libwrap support, what userid should it use
+ # when executing your libwrap commands?  "libwrap".
+-#user.libwrap: libwrap
++user.libwrap: nobody
+ 
+ 
+ #

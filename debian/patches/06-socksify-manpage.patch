@@ -1,0 +1,40 @@
+Add a manual page for socksify(1).
+
+--- /dev/null
++++ b/doc/socksify.1
+@@ -0,0 +1,35 @@
++.TH SOCKSIFY 1
++.\" NAME should be all caps, SECTION should be 1-8, maybe w/ subsection
++.\" other parms are allowed: see man(7), man(1)
++.SH NAME
++socksify \- dynamically SOCKSifies a program
++.SH SYNOPSIS
++.B socksify
++.I program
++[
++.I arguments
++]
++
++.SH "DESCRIPTION"
++.B socksify
++is Dante's equivalent of the NEC SOCKS'
++.BR runsocks .
++sockisfy uses
++.B LD_PRELOAD
++environment variable to wrap all networking-related system calls 
++so that programs can go thought a SOCKS server that was installed as part of
++a firewall.
++.SH "SEE ALSO"
++.\" Always quote multiple words for .SH
++.BR dante.conf(5)
++.SH NOTES
++A more permanent solution would be to add the 
++.I LD_PRELOAD
++environment
++value to the shell startup files.  Then all non-set[ug]id applications
++that are linked dynamically would be socksified.  However this can have bad
++side-effects.
++.SH AUTHOR
++Dante was developed for Inferno Nettverk A/S, Norway by:
++ - Michael Shuldman <michaels@inet.no>: Design and implementation.
++ - Karl-André Skevik <karls@inet.no>: Autoconf and porting.

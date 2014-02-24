@@ -1,0 +1,39 @@
+Fix the manual page errors - these are man (an.tmac) pages, not mdoc ones :)
+
+--- a/doc/sockd.conf.5
++++ b/doc/sockd.conf.5
+@@ -290,10 +290,10 @@
+ \fBredirect\fP statement.  The syntax of the statement is
+ as follows:
+ 
+-.D1
++.IP
+ \fBredirect\fP from: \fBADDRESS\fP
+ 
+-.D1
++.IP
+ \fBredirect\fP to: \fBADDRESS\fP
+ 
+ The semantics of \fBfrom\fP and \fBto\fP vary according to
+@@ -325,8 +325,8 @@
+  Karl-Andre' Skevik <karls@inet.no>: Autoconf and porting.
+ .SH SEE ALSO
+ danted(8), dante.conf(5), hosts_access(5)
+-.Pp
++.PP
+ Information about new releases and other related issues can be found
+ on the
+-.Nm \fBDante\fP
++.B Dante
+ WWW home page at http://www.inet.no/dante.
+--- a/doc/socks.conf.5
++++ b/doc/socks.conf.5
+@@ -126,7 +126,7 @@
+  Karl-Andre' Skevik <karls@inet.no>: Autoconf and porting.
+ .SH SEE ALSO
+ danted(8) danted.conf(5)
+-.Pp
++.PP
+ Information about new releases and other related issues can be found
+ on the
+ \fBDante\fP

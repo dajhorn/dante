@@ -1,0 +1,14 @@
+Try harder to get an address.
+
+--- a/sockd/getifa.c
++++ b/sockd/getifa.c
+@@ -120,8 +120,7 @@
+ 
+ 	if (rtnetlink_sk == -1) {
+ 		swarn("%s: socket(NETLINK_ROUTE)", function);
+-		close(rtnetlink_sk);
+-		return inaddr_none;
++		return getdefaultexternal();
+ 	}
+ 
+ 	/*===================================================================

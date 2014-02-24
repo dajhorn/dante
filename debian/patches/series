@@ -1,0 +1,15 @@
+01-rename-library.patch
+02-rename-programs.patch
+03-configure.patch
+04-faq.patch
+05-readme-functions.patch
+06-socksify-manpage.patch
+07-rconnect.patch
+09-getifa-address.patch
+10-config-users.patch
+11-linux-eccentricities.patch
+12-man-errors.patch
+13-c-warnings.patch
+14-httpproxy-underrun.patch
+15-fixlibc-search.patch
+16-fix-dlopen.patch
