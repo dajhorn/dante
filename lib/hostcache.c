@@ -1,5 +1,6 @@
 /*
- * Copyright (c) 1997, 1998, 1999, 2000, 2001, 2002, 2003
+ * Copyright (c) 1997, 1998, 1999, 2000, 2001, 2008, 2009, 2010, 2011, 2012,
+ *               2013
  *      Inferno Nettverk A/S, Norway.  All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
@@ -44,365 +45,1327 @@
 #include "common.h"
 
 static const char rcsid[] =
-"$Id: hostcache.c,v 1.24 2003/07/01 13:21:29 michaels Exp $";
+"$Id: hostcache.c,v 1.172 2013/10/27 15:24:42 karls Exp $";
 
-__BEGIN_DECLS
+#if !SOCKS_CLIENT
 
-#if SOCKS_SERVER
+#define MIN_HASH_SIZE (10240)
+/*
+ * Assume this is so small a cache that it's better to just scan it
+ * sequentially rather than expire DNS-entries that we could otherwise
+ * have continued to keep in the cache.
+ */
+
+static size_t
+hosthash(const char *name, const size_t size);
+/*
+ * Calculates a hash value for "name" and returns it's value.
+ * Size of hash table is given by "size".
+*/
+
+static hostentry_t *
+hostentcopy(hostentry_t *to, const struct hostent *from);
+/*
+ * Copies all the values in "from" into "to", or as much as there is room
+ * for.
+ *
+ * The only reason this function may fail is if "from" is too big, i.e.
+ * has names that are too long (according to the dns spec) or similar.
+ *
+ * Note that the caller must set to->h_name or to->ipv4 when creating the
+ * original entry based on the result of a gethostby*() call.  This is because
+ * the result returned by the gethostby*() call may not be the address
+ * used when gethostby*() was called, but the latter is what we want to use
+ * in our cache.
+ *
+ * Returns "to" on success, NULL on failure.
+ */
+
+
+
+static size_t
+addrhash(const struct sockaddr_storage *addr, const size_t size);
+/*
+ * Calculates a hash value for the IP-address "addr" and returns it's value.
+ * Size of hash table is given by "size".
+*/
+
+static int
+addrisinlist(const struct sockaddr *addr, struct addrinfo *ailist,
+             struct addrinfo *ailist_last);
+/*
+ * "ailist_last" is the last member in the "ailist" that is valid.
+ *
+ * Returns true if the address "addr" is in the list "ailist".
+ * Returns false otherwise.
+ */
+
+dnsinfo_t *
+getoldest( const size_t starti);
+/*
+ * Returns the oldest entry at index "starti" or later.
+ */
+
+static int
+name_matches_cache(const dnsinfo_t *cacheentry,
+                   const char *name, const char *service,
+                   const struct addrinfo *hints);
+static int
+addr_matches_cache(const dnsinfo_t *cacheentry, const struct sockaddr *addr,
+                   const int flags);
+
+/*
+ * If the passed arguments match the cache entry "cacheentry",
+ * the functions returns true.
+ * Otherwise they returns false.
+ */
+
+
+
+#if STANDALONE_UNIT_TEST
+size_t cbyname_hit, cbyname_miss;
+size_t cbyaddr_hit, cbyaddr_miss;
+#endif /* !STANDALONE_UNIT_TEST */
+
+/*
+ * hostname/ipaddress cache.  Shared among all processes.
+ */
+UNIT_TEST_STATIC_SCOPE dnsinfo_t *hostcache;
+
+
+static int
+gai2h_errno(const int gai_rc);
+/*
+ * Returns the h_errno version of the getaddrinfo/getnameinfo error "gai_rc".
+ */
+
+#undef cgetaddrinfo
+
+#endif /* !SOCKS_CLIENT */
+
+UNIT_TEST_STATIC_SCOPE int
+addrinfocopy(dnsinfo_t *to, const struct addrinfo *from,
+             const struct addrinfo *hints);
+/*
+ * Copies all the values in "from" into "to", or as much as there is room
+ * for.  "hints" is taken into consideration concerning what to copy.
+ *
+ * The only reason this function may fail is if "from" is too big, i.e.
+ * has names that are too long (according to the dns spec) or similar,
+ * *OR* if "hints" precludes some entries from being copied.
+ *
+ * Returns an errocode of the same type as getaddrinfo(3).
+ */
+
+
+#if SOCKSLIBRARY_DYNAMIC
 
 #undef gethostbyaddr
 #undef gethostbyname
 
-#if SOCKSLIBRARY_DYNAMIC
+#undef getnameinfo
 
-#define gethostbyaddr(addr, len, type)	sys_gethostbyaddr(addr, len, type)
-#define gethostbyname(name)				sys_gethostbyname(name)
+
+#define gethostbyaddr(addr, len, type)   sys_gethostbyaddr(addr, len, type)
+
+#if SOCKS_CLIENT
+#define gethostbyname(name)              sys_gethostbyname(name)
+#endif /* SOCKS_CLIENT */
 
 #endif /* SOCKSLIBRARY_DYNAMIC */
 
-static struct hostent *
-hostentupdate __P((struct hostent *old, const struct hostent *new));
-/*
- * Updates "old" with the contents of "new", freeing any
- * resources currently used by "old".
- * Returns:
- *		On success: "old", updated.
- *		On failure: NULL.
-*/
+#define GAI_RC_IS_SYSTEMPROBLEM(gai_rc)    \
+      ((gai_rc) == EAI_MEMORY              \
+   ||  (gai_rc) == EAI_SYSTEM)
 
-static int
-hosthash __P((const char *name, size_t size));
-/*
- * Calculates a hashvalue for "name" and returns it's value.
- * Size of hashtable is given by "size".
-*/
+#define GAI_RC_IS_EAGAIN(gai_rc)           \
+   ((gai_rc) == EAI_AGAIN)
 
-static int
-addrhash __P((in_addr_t addr, size_t size));
-/*
- * Calculates a hashvalue for "addr" and returns it's value.
- * Size of hashtable is given by "size".
-*/
+#define GAI_RC_IS_INTERNALERROR(gai_rc)    \
+   (  ((gai_rc) == EAI_BADFLAGS)           \
+   || ((gai_rc) == EAI_FAMILY)             \
+   || ((gai_rc) == EAI_SOCKTYPE)           \
+   || ((gai_rc) == EAI_OVERFLOW))
 
-#endif /* SOCKS_SERVER */
-
-static char **
-listrealloc __P((char ***old, const char ***new, int length));
-/*
- * Reallocates "old" and copies in the contents of "new".
- * The last element of both "old" and "new" must be NULL.
- * If "length" is less than 0, each element is assumed to
- * be NUL terminated, otherwise "length" gives the total length
- * of every string.
- * Returns:
- *		On success: "**old", with the contents of "new".
- *		On failure: NULL.
-*/
-
-__END_DECLS
-
-struct hostent *
-hostentdup(hostent)
-	const struct hostent *hostent;
+int
+cgetaddrinfo(name, service, hints, res, resmem)
+   const char *name;
+   const char *service;
+   const struct addrinfo *hints;
+   struct addrinfo **res;
+   dnsinfo_t *resmem;
 {
-	static struct hostent dupedinit;
-	struct hostent *duped;
+   const char *function = "cgetaddrinfo()";
+   char namebuf[MAXHOSTNAMELEN * 4], servicebuf[MAXSERVICELEN * 4];
+   int gai_rc;
 
-	if ((duped = (struct hostent *)malloc(sizeof(*duped))) == NULL)
-		return NULL;
+#if SOCKS_CLIENT
+   /*
+    * No cache for client.  Just a slightly different interface, mainly
+    * to limit differences in code called by both client and server, as
+    * the server caches the result of getaddrinfo(3).
+    */
 
-	*duped = dupedinit;
+   SASSERTX(res    != NULL);
+   SASSERTX(resmem != NULL);
 
-	if ((duped->h_name = strdup(hostent->h_name)) == NULL) {
-		hostentfree(duped);
-		return NULL;
-	}
+   if ((gai_rc = getaddrinfo(name, service, hints, res)) != 0)
+      return gai_rc;
 
-	if (listrealloc(&duped->h_aliases, (const char ***)&hostent->h_aliases, -1)
-	== NULL) {
-		hostentfree(duped);
-		return NULL;
-	}
+   SASSERTX(*res != NULL);
 
-	duped->h_addrtype = hostent->h_addrtype;
-	duped->h_length	= hostent->h_length;
+   /* have mem.  Don't use the one returned from getaddrinfo (3). */
+   freeaddrinfo(*res);
 
-	if (listrealloc(&duped->h_addr_list, (const char ***)&hostent->h_addr_list,
-	hostent->h_length) == NULL) {
-		hostentfree(duped);
-		return NULL;
-	}
+   if ((gai_rc = addrinfocopy(resmem, *res, hints)) != 0
+   && GAI_RC_IS_SYSTEMPROBLEM(gai_rc))
+      swarnx("%s: addrinfocopy() failed for hostname \"%s\", service \"%s\"",
+             function,
+             str2vis(name, strlen(name), namebuf, sizeof(namebuf)),
+             service == NULL ?
+             "<NULL>" : str2vis(service,
+                                strlen(service),
+                                servicebuf,
+                                sizeof(servicebuf)));
 
-	return duped;
+   return gai_rc;
+
+#else /* !SOCKS_CLIENT */
+
+   static size_t i;
+   static int count;
+   const time_t timenow = time_monotonic(NULL);
+#if !STANDALONE_UNIT_TEST
+   static size_t cbyname_hit, cbyname_miss;
+#endif /* !STANDALONE_UNIT_TEST */
+   dnsinfo_t *freehost;
+   size_t hashi;
+   int have_oldres = 0;
+
+   SASSERTX(res    != NULL);
+   SASSERTX(resmem != NULL);
+
+   if (count++ % SOCKD_CACHESTAT == 0)
+      slog(LOG_DEBUG, "%s, hit: %lu, miss: %lu",
+           function, (unsigned long)cbyname_hit, (unsigned long)cbyname_miss);
+
+   if (strlen(name) >= sizeof(freehost->id.name)) {
+      swarnx("%s: hostname \"%s\" is too long.  Max length is %lu",
+              function,
+              str2vis(name, strlen(name), namebuf, sizeof(namebuf)),
+              (unsigned long)sizeof(freehost->id.name) - 1);
+
+      return EAI_MEMORY;
+   }
+
+   if (service != NULL && strlen(service) >= sizeof(freehost->service)) {
+      swarn("max length of servicename was at compiletime set to %lu, but "
+            "now being called with servicename of length %lu.  Recompile "
+            "required to support a servicename this long.  "
+            "Servicename: \"%s\"",
+            (unsigned long)sizeof(freehost->service) - 1,
+            (unsigned long)strlen(service) + 1,
+            str2vis(service, strlen(service), servicebuf, sizeof(servicebuf)));
+
+      return EAI_MEMORY;
+   }
+
+   socks_lock(sockscf.hostfd, 0, 0, 0, 1);
+
+   /*
+    * First check if the desired name is the same as last time.
+    */
+   if (i < SOCKD_HOSTCACHE
+   &&  name_matches_cache(&hostcache[i], name, service, hints)) {
+      if (socks_difftime(timenow, hostcache[i].written) < SOCKD_CACHETIMEOUT) {
+         ++cbyname_hit;
+
+         if (hostcache[i].gai_rc == 0) {
+            gai_rc = addrinfocopy(resmem,
+                                  &hostcache[i].data.getaddr.addrinfo,
+                                  hints);
+            SASSERTX(gai_rc == 0);
+
+            *res = &resmem->data.getaddr.addrinfo;
+         }
+
+         socks_unlock(sockscf.hostfd, 0, 0);
+         return hostcache[i].gai_rc;
+      }
+      /*
+       * Else; in cache, but expired already.
+       */
+      freehost = &hostcache[i];
+      hashi    = hosthash(name, SOCKD_HOSTCACHE);
+
+      if (freehost->gai_rc == 0) {
+         gai_rc = addrinfocopy(resmem,
+                               &freehost->data.getaddr.addrinfo,
+                               hints);
+
+         SASSERTX(gai_rc == 0);
+         have_oldres = 1;
+      }
+   }
+   else {
+      /*
+       * Go through the entire in the cache, looking for a match.
+       */
+      hashi = hosthash(name, SOCKD_HOSTCACHE);
+      for (i = hashi, freehost = NULL; i < SOCKD_HOSTCACHE; ++i) {
+         if (!hostcache[i].allocated) {
+            if (freehost == NULL)
+               freehost = &hostcache[i];
+
+            continue;
+         }
+
+         if (name_matches_cache(&hostcache[i], name, service, hints)) {
+            if (socks_difftime(timenow, hostcache[i].written)
+            >= SOCKD_CACHETIMEOUT) {
+               freehost = &hostcache[i];
+
+               if (freehost->gai_rc == 0) {
+                  gai_rc = addrinfocopy(resmem,
+                                        &freehost->data.getaddr.addrinfo,
+                                        hints);
+
+                  SASSERTX(gai_rc == 0);
+                  have_oldres = 1;
+               }
+
+               break;
+            }
+
+            ++cbyname_hit;
+
+            if (hostcache[i].gai_rc != 0) {
+               socks_unlock(sockscf.hostfd, 0, 0);
+               return hostcache[i].gai_rc;
+            }
+
+            gai_rc = addrinfocopy(resmem,
+                                  &hostcache[i].data.getaddr.addrinfo,
+                                  hints);
+
+            SASSERTX(gai_rc == 0);
+
+            socks_unlock(sockscf.hostfd, 0, 0);
+
+            *res = &resmem->data.getaddr.addrinfo;
+            return 0;
+         }
+      }
+   }
+
+   ++cbyname_miss;
+
+   /*
+    * This name is not in the cache.  Resolve via DNS and cache result.
+    */
+
+   socks_unlock(sockscf.hostfd, 0, 0);
+
+   if ((gai_rc = getaddrinfo(name, service, hints, res)) != 0) {
+      slog(LOG_DEBUG, "%s: getaddrinfo(%s, %s) failed: %s",
+           function,
+           str2vis(name, strlen(name), namebuf, sizeof(namebuf)),
+           service == NULL ?
+            "<NULL>" : str2vis(service,
+                               strlen(service),
+                               servicebuf,
+                               sizeof(servicebuf)),
+           gai_strerror(gai_rc));
+
+      if (gai_rc == EAI_SYSTEM && ERRNOISNOFILE(errno)) {
+         if (sockscf.state.reservedfdv[0] != -1) {
+            close(sockscf.state.reservedfdv[0]);
+
+            gai_rc = getaddrinfo(name, service, hints, res);
+
+            sockscf.state.reservedfdv[0] = makedummyfd(0, 0);
+
+            if (gai_rc != 0)
+               slog(LOG_DEBUG, "%s: getaddrinfo(%s, %s) failed again: %s",
+                    function,
+                    str2vis(name, strlen(name), namebuf, sizeof(namebuf)),
+                    service == NULL ?
+                        "<NULL>" : str2vis(service,
+                                           strlen(service),
+                                           servicebuf,
+                                           sizeof(servicebuf)),
+                    gai_strerror(gai_rc));
+
+         }
+      }
+   }
+#if HAVE_LINUX_BUGS
+   /* glibc calls connect(2) to something that fails from __GI_getaddrinfo(),
+    * and then does not clear the errno, so even though the above getaddrinfo()
+    * call succeeded, errno is now set, at least on the glibc used by
+    * 3.7.3-101.fc17.x86_64.
+    */
+   else
+      errno = 0;
+#endif /* HAVE_LINUX_BUGS */
+
+   if (gai_rc != 0)  {
+      /*
+       * check if the problem is ours, or the DNS's.
+       */
+
+      if (GAI_RC_IS_SYSTEMPROBLEM(gai_rc)) {
+         swarn("%s: getaddrinfo(%s, %s) failed again: %s",
+               function,
+               str2vis(name, strlen(name), namebuf, sizeof(namebuf)),
+               service == NULL ?
+                   "<NULL>" : str2vis(service,
+                                      strlen(service),
+                                      servicebuf,
+                                      sizeof(servicebuf)),
+               gai_strerror(gai_rc));
+
+      }
+
+      if (have_oldres) {
+         slog(LOG_DEBUG,
+              "%s: resolve of %s failed.  Returning stale cache entry",
+              function,
+              str2vis(name, strlen(name), namebuf, sizeof(namebuf))),
+
+         *res = &resmem->data.getaddr.addrinfo;
+         return 0;
+      }
+
+      if (GAI_RC_IS_SYSTEMPROBLEM(gai_rc))
+         return gai_rc;
+      else if (GAI_RC_IS_EAGAIN(gai_rc))
+         return gai_rc;
+      else if (GAI_RC_IS_INTERNALERROR(gai_rc))
+         SERR(gai_rc);
+
+      /* else; assume problem is not ours. */
+   }
+
+   /*
+    * Either things resolved ok, or the reason for failure is not our own
+    * (i.e., not lack of memory, free fds, etc.).
+    */
+
+   if (gai_rc == 0)
+      SASSERTX(*res != NULL);
+   else {
+      /*
+       * else; assume host does not exist at the moment and cache that result.
+       */
+      *res = NULL;
+      res  = NULL;
+   }
+
+   socks_lock(sockscf.hostfd, 0, 0, 1, 1);
+
+   if (freehost == NULL)
+      freehost = getoldest(hashi);
+   /*
+    * else: contents pointed to can have changed, in which case we may now
+    * be overwriting one of the most recent entries, but never mind that.
+    */
+
+   SASSERTX(freehost != NULL);
+
+   if (gai_rc == 0) {
+      gai_rc = addrinfocopy(freehost, *res, hints);
+
+      /*
+       * have resmem.  Don't use the mem returned from getaddrinfo (3).
+       */
+      freeaddrinfo(*res);
+
+      if (gai_rc != 0) {
+         if (GAI_RC_IS_SYSTEMPROBLEM(gai_rc))
+            swarnx("%s: addrinfocopy() failed for \"%s\"/service \"%s\": %s",
+                   function,
+                   str2vis(name, strlen(name), namebuf, sizeof(namebuf)),
+                   service == NULL ?
+                    "<NULL>" : str2vis(service,
+                                       strlen(service),
+                                       servicebuf,
+                                       sizeof(servicebuf)),
+                   gai_strerror(gai_rc));
+
+         socks_unlock(sockscf.hostfd, 0, 0);
+         return gai_rc;
+      }
+   }
+
+   if (hints == NULL)
+      freehost->data.getaddr.hints = NULL;
+   else {
+      freehost->data.getaddr.hints  = &freehost->data.getaddr.hints_mem;
+      *freehost->data.getaddr.hints = *hints;
+   }
+
+   freehost->key = id_name;
+   STRCPY_ASSERTLEN(freehost->id.name, name);
+
+   if (service == NULL)
+      *freehost->service = NUL;
+   else
+      STRCPY_ASSERTLEN(freehost->service, service);
+
+   freehost->written   = timenow;
+   freehost->gai_rc    = gai_rc;
+   freehost->allocated = 1;
+
+   SASSERTX(freehost->key == id_name);
+
+   if (gai_rc == 0) {
+      gai_rc = addrinfocopy(resmem, &freehost->data.getaddr.addrinfo, hints);
+      SASSERTX(gai_rc == 0);
+   }
+
+   socks_unlock(sockscf.hostfd, 0, 0);
+
+   resmem->gai_rc = gai_rc;
+   if (resmem->gai_rc == 0)
+      *res = &resmem->data.getaddr.addrinfo;
+
+   return resmem->gai_rc;
+#endif /* !SOCKS_CLIENT */
+}
+
+#if !SOCKS_CLIENT
+int
+cgetnameinfo(addr, addrlen, _host, _hostlen, _service, _servicelen, flags)
+   const struct sockaddr *addr;
+   const socklen_t addrlen;
+   char *_host;
+   const socklen_t _hostlen;
+   char *_service;
+   const socklen_t _servicelen;
+   const int flags;
+{
+   const char *function = "cgetnameinfo()";
+   const time_t timenow = time_monotonic(NULL);
+#if !STANDALONE_UNIT_TEST
+   static size_t cbyaddr_hit, cbyaddr_miss;
+#endif /* !STANDALONE_UNIT_TEST */
+   static size_t i;
+   static int count;
+   dnsinfo_t *freehost;
+   size_t hashi;
+   char host[sizeof(freehost->data.getname.name)],
+        service[sizeof(freehost->service)];
+   int gai_rc, have_oldres = 0;
+
+#define DOCOPY(_host, _hostlen, _service, _servicelen, cacheentry)             \
+do {                                                                           \
+   if ((_hostlen) > 0) {                                                       \
+      strncpy((_host), (cacheentry)->data.getname.name, (_hostlen) - 1);       \
+      (_host)[(_hostlen) - 1] = NUL;                                           \
+   }                                                                           \
+                                                                               \
+   if ((_servicelen) > 0) {                                                    \
+      strncpy((_service), (cacheentry)->service, (_servicelen) - 1);           \
+      (_service)[(_servicelen) - 1] = NUL;                                     \
+   }                                                                           \
+} while (/* CONSTCOND */ 0)
+
+   if (count++ % SOCKD_CACHESTAT == 0) {
+      slog(LOG_DEBUG, "%s: hit: %lu, miss: %lu",
+           function, (unsigned long)cbyaddr_hit, (unsigned long)cbyaddr_miss);
+   }
+
+   socks_lock(sockscf.hostfd, 0, 0, 0, 1);
+
+   /*
+    * First check if the desired name is the same as last time.
+    */
+   if (i < SOCKD_HOSTCACHE
+   &&  addr_matches_cache(&hostcache[i], addr, flags)) {
+      if (socks_difftime(timenow, hostcache[i].written) < SOCKD_CACHETIMEOUT) {
+         ++cbyaddr_hit;
+
+         if (hostcache[i].gai_rc == 0)
+            DOCOPY(_host, _hostlen, _service, _servicelen, &hostcache[i]);
+
+         socks_unlock(sockscf.hostfd, 0, 0);
+         return hostcache[i].gai_rc;
+      }
+
+      /*
+       * Else; have an entry, but it's expired already.
+       */
+
+      freehost = &hostcache[i];
+      hashi    = addrhash(TOCSS(addr), SOCKD_HOSTCACHE);
+
+      if (freehost->gai_rc == 0) {
+         DOCOPY(_host, _hostlen, _service, _servicelen, freehost);
+         have_oldres = 1;
+      }
+
+   }
+   else {
+      /*
+       * Go through the cache and see if there is match there.
+       */
+      hashi = addrhash(TOCSS(addr), SOCKD_HOSTCACHE);
+      for (i = hashi, freehost = NULL; i < SOCKD_HOSTCACHE; ++i) {
+         if (!hostcache[i].allocated) {
+            if (freehost == NULL)
+               freehost = &hostcache[i];
+
+            continue;
+         }
+
+         if (addr_matches_cache(&hostcache[i], addr, flags)) {
+            if (socks_difftime(timenow, hostcache[i].written)
+            >= SOCKD_CACHETIMEOUT) {
+               freehost = &hostcache[i];
+
+               if (freehost->gai_rc == 0) {
+                  DOCOPY(_host, _hostlen, _service, _servicelen, freehost);
+                  have_oldres = 1;
+               }
+
+               break;
+            }
+
+            ++cbyaddr_hit;
+
+            if (hostcache[i].gai_rc != 0) {
+               socks_unlock(sockscf.hostfd, 0, 0);
+               return hostcache[i].gai_rc;
+            }
+
+            DOCOPY(_host, _hostlen, _service, _servicelen, &hostcache[i]);
+
+            socks_unlock(sockscf.hostfd, 0, 0);
+            return 0;
+         }
+      }
+   }
+
+   ++cbyaddr_miss;
+
+   socks_unlock(sockscf.hostfd, 0, 0);
+
+#if SOCKSLIBRARY_DYNAMIC
+   /*
+    * In case getnameinfo(3) resolves to some other libresolv call
+    * which we are also interpositioning. E.g. on FreeBSD 9.1 it's
+    * getnameinfo(3) -> getipnodebyaddr(3) -> gethostbyaddr(3).
+    * We don't want that; when we call getnameinfo(3), we don't want
+    * that to resolve to something possibly interpositioned by us.
+    */
+
+   socks_markasnative("*");
+#endif /* SOCKSLIBRARY_DYNAMIC */
+
+   gai_rc = getnameinfo(addr,
+                        addrlen,
+                        host,
+                        sizeof(host),
+                        service,
+                        sizeof(service),
+                        flags);
+
+#if SOCKSLIBRARY_DYNAMIC
+   socks_markasnormal("*");
+#endif /* SOCKSLIBRARY_DYNAMIC */
+
+   if (gai_rc != 0) {
+      slog(LOG_DEBUG, "%s: getnameinfo(%s) failed: %s",
+           function,
+           sockaddr2string(TOCSS(addr), NULL, 0),
+           gai_strerror(gai_rc));
+
+      if (GAI_RC_IS_SYSTEMPROBLEM(gai_rc)) {
+         if (sockscf.state.reservedfdv[0] != -1) {
+            close(sockscf.state.reservedfdv[0]);
+
+            gai_rc = getnameinfo(addr,
+                                 addrlen,
+                                 host,
+                                 sizeof(host),
+                                 service,
+                                 sizeof(service),
+                                 flags);
+
+            sockscf.state.reservedfdv[0] = makedummyfd(0, 0);
+
+            if (gai_rc != 0) {
+               slog(LOG_DEBUG, "%s: getnameinfo(%s) failed again: %s",
+                    function,
+                    sockaddr2string(TOCSS(addr), NULL, 0),
+                    gai_strerror(gai_rc));
+            }
+         }
+      }
+   }
+
+   if (gai_rc != 0) {
+      if (have_oldres) {
+         slog(LOG_DEBUG,
+              "%s: resolve of %s failed.  Returning stale cache entry",
+              function, sockaddr2string(TOCSS(addr), NULL, 0));
+
+         /* should be copied into _host and _service already. */
+         return 0;
+      }
+
+      if (GAI_RC_IS_SYSTEMPROBLEM(gai_rc)) {
+         swarn("%s: getnameinfo(%s) failed: %s",
+               function,
+               sockaddr2string(TOCSS(addr), NULL, 0),
+               gai_strerror(gai_rc));
+
+         return gai_rc;
+      }
+      else if (GAI_RC_IS_EAGAIN(gai_rc))
+         return gai_rc;
+      else if (GAI_RC_IS_INTERNALERROR(gai_rc))
+         SERR(gai_rc);
+   }
+
+   socks_lock(sockscf.hostfd, 0, 0, 1, -1);
+
+   if (freehost == NULL)
+      freehost = getoldest(hashi);
+
+   SASSERTX(freehost != NULL);
+
+   freehost->gai_rc = gai_rc;
+
+   STRCPY_ASSERTSIZE(freehost->service, service);
+   STRCPY_ASSERTSIZE(freehost->data.getname.name, host);
+
+   freehost->data.getname.flags = flags;
+   freehost->written            = timenow;
+   freehost->key                = id_addr;
+   memcpy(&freehost->id.addr, addr, MIN(sizeof(freehost->id.addr), addrlen));
+
+   freehost->allocated = 1;
+
+   socks_unlock(sockscf.hostfd, 0, 0);
+
+   if (freehost->gai_rc == 0)
+      DOCOPY(_host, _hostlen, _service, _servicelen, freehost);
+
+   return freehost->gai_rc;
+}
+#endif /* !SOCKS_CLIENT */
+
+
+int
+addrinfo_issupported(ai)
+   const struct addrinfo *ai;
+{
+
+   if (!safamily_issupported(ai->ai_family))
+      return 0;
+
+   switch (ai->ai_socktype) {
+      case 0: /* Solaris. :-(. */
+      case SOCK_STREAM:
+      case SOCK_DGRAM:
+         break;
+
+      default:
+         return 0;
+   }
+
+   switch (ai->ai_protocol) {
+      case 0: /* Solaris. :-(. */
+      case IPPROTO_TCP:
+      case IPPROTO_UDP:
+         break;
+
+      default:
+         return 0;
+   }
+
+   return 1;
+}
+
+UNIT_TEST_STATIC_SCOPE int
+addrinfocopy(to, from, hints)
+   dnsinfo_t *to;
+   const struct addrinfo *from;
+   const struct addrinfo *hints;
+{
+   const char *function = "addrinfocopy()";
+   const struct addrinfo *from_ai;
+   const size_t maxentries = ELEMENTS(to->data.getaddr.ai_addr_mem);
+   struct addrinfo *to_ai, *to_ai_previous, *to_ai_start;
+   char visbuf[MAXHOSTNAMELEN * 4];
+   size_t i;
+
+   bzero(to, sizeof(*to));
+
+   from_ai        = from;
+   to_ai          = &to->data.getaddr.addrinfo;
+   to_ai_start    = to_ai;
+   to_ai_previous = to_ai;
+   i = 0;
+
+   while (i < maxentries && from_ai != NULL) {
+#if !SOCKS_CLIENT
+      int doskip = 0;
+
+      if (!addrinfo_issupported(from_ai))
+         doskip = 1;
+      else if (i > 0
+      && ntohs(GET_SOCKADDRPORT(TOSS(from_ai->ai_addr)))        == 0
+      && ntohs(GET_SOCKADDRPORT(TOSS(to_ai_previous->ai_addr))) == 0
+      && addrisinlist(from_ai->ai_addr, to_ai_start, to_ai_previous)) {
+         /*
+          * same address as before, just different protocol.  We don't
+          * care about protocol and don't want to waste memory on that.
+          *
+          * We compare against 0 since a portnumber of 0 should mean
+          * the caller doesn't care either (though this will still not
+          * make things work in the generic case, where the caller may
+          * be looking for an entry with the appropriate protocol),
+          * and makes it easy to set a portnumber (different from 0)
+          * when used in a particular unit-test.  Apart from that, it
+          * would be more correct to ignore the portnumber of of course.
+          */
+         slog(LOG_DEBUG, "%s: skipping address %s, protocol %d",
+              function,
+              sockaddr2string(TOSS(from_ai->ai_addr), NULL, 0),
+              from_ai->ai_protocol);
+
+         doskip = 1;
+      }
+      else if (from->ai_addr->sa_family == AF_INET6
+      && IN6_IS_ADDR_V4MAPPED(&TOIN6(from->ai_addr)->sin6_addr)) {
+         if (hints != NULL
+         && hints->ai_family != 0
+         && hints->ai_family != AF_INET)
+            doskip = 1;
+         else if (!external_has_safamily(AF_INET)) {
+            /*
+             * no point in converting to IPv4 if we don't have any
+             * IPv4 address to use.  Lets hope there is another
+             * address for this hostname.
+             */
+            doskip = 1;
+         }
+         else {
+            /*
+             * Have IPv4 on external interface and hints does not preclude
+             * us from returning IPv4, so can convert the address from
+             * IPv4-mapped IPv6 (which we don't want to use), to a regular
+             * IPv4 address.
+             */
+
+            *to_ai = *from_ai; /* most attributes will remain the same. */
+
+            to_ai->ai_addr = TOSA(&to->data.getaddr.ai_addr_mem[i]);
+            bzero(to_ai->ai_addr, salen(AF_INET));
+            SET_SOCKADDR(TOSS(to_ai->ai_addr), AF_INET);
+
+            ipv4_mapped_to_regular(&TOIN6(from->ai_addr)->sin6_addr,
+                                   &TOIN(to_ai->ai_addr)->sin_addr);
+
+            to_ai->ai_family  = AF_INET;
+            to_ai->ai_addrlen = salen(AF_INET);
+         }
+      }
+      else {
+         *to_ai          = *from_ai;
+         to_ai->ai_addr  = TOSA(&to->data.getaddr.ai_addr_mem[i]);
+         memcpy(to_ai->ai_addr, from_ai->ai_addr, from_ai->ai_addrlen);
+      }
+
+      if (doskip) {
+         slog(LOG_DEBUG, "%s: skipping address family %d",
+              function, from_ai->ai_addr->sa_family);
+
+         from_ai = from_ai->ai_next;
+         continue;
+      }
+
+#else /* SOCKS_CLIENT */
+
+      *to_ai  = *from_ai;
+
+#endif /* !SOCKS_CLIENT */
+
+      if (from_ai->ai_canonname != NULL) {
+         const size_t len = strlen(from_ai->ai_canonname);
+
+         if (len >= sizeof(to->data.getaddr.ai_canonname_mem)) {
+            swarnx("%s: DNS-name %s is %lu bytes long, expected max is %lu",
+                   function,
+                    str2vis(from->ai_canonname, len, visbuf, sizeof(visbuf)),
+                   (unsigned long)len,
+                  (unsigned long)sizeof(to->data.getaddr.ai_canonname_mem) - 1);
+
+            return EAI_MEMORY;
+         }
+
+         /*
+          * Whether any entries but the first entry have an ai_canonname
+          * appears to vary.
+          *
+          * glibc:     no, at least the version on 3.7.3-101.fc17.x86_64.
+          * libresolv: yes, at least the version with FreeBSD 9.1-RELEASE.
+          *
+          * In both cases, all ai_canonnames are the same however, so
+          * we do not need to allocate separate memory for them but can
+          * let them all use the memory of the first entry.
+          */
+
+         if (i == 0) /* first entry; initialize memory. */
+            memcpy(to->data.getaddr.ai_canonname_mem,
+                   from_ai->ai_canonname,
+                   len + 1);
+
+         to_ai->ai_canonname = to->data.getaddr.ai_canonname_mem;
+      }
+      else
+         to_ai->ai_canonname = NULL;
+
+      from_ai        = from_ai->ai_next;
+
+      to_ai_previous = to_ai;
+      to_ai->ai_next = &to->data.getaddr.ai_next_mem[i];
+      to_ai          = to_ai->ai_next;
+
+      ++i;
+   }
+
+   to_ai->ai_next = NULL;
+
+   if (from_ai == NULL ||  i >= maxentries)
+      to_ai_previous->ai_next = NULL;
+
+   if (i == 0) {
+      slog(LOG_DEBUG, "%s: strange, no entries copied", function);
+
+      bzero(&to->data.getaddr.addrinfo, sizeof(to->data.getaddr.addrinfo));
+      return EAI_FAMILY;
+   }
+
+
+   return 0;
+}
+
+
+#if !SOCKS_CLIENT
+
+static int
+gai2h_errno(gai_rc)
+   const int gai_rc;
+{
+
+   switch (gai_rc) {
+      case EAI_AGAIN:
+      case EAI_MEMORY:
+         return TRY_AGAIN;
+
+      case EAI_NONAME:
+         return HOST_NOT_FOUND;
+   }
+
+   return NO_RECOVERY;
 }
 
 void
-hostentfree(hostent)
-	struct hostent *hostent;
+hostcachesetup(void)
 {
-	char **p;
+   const char *function = "hostcachesetup()";
 
-	if (hostent == NULL)
-		return;
+   if ((sockscf.hostfd = socks_mklock(SOCKD_SHMEMFILE, NULL, 0)) == -1)
+      serr("%s: socks_mklock() failed to create shmemfile using base %s",
+           function, SOCKD_SHMEMFILE);
 
-	free(hostent->h_name);
-	hostent->h_name = NULL;
-
-	if (hostent->h_aliases != NULL)
-		for (p = hostent->h_aliases; *p != NULL; ++p)
-			free(*p);
-	free(hostent->h_aliases);
-	hostent->h_aliases = NULL;
-
-	if (hostent->h_addr_list != NULL)
-		for (p = hostent->h_addr_list; *p != NULL; ++p)
-			free(*p);
-	free(hostent->h_addr_list);
-	hostent->h_addr_list = NULL;
-
-	free(hostent);
+   if ((hostcache = sockd_mmap(NULL,
+                               sizeof(*hostcache) * SOCKD_HOSTCACHE,
+                               PROT_READ | PROT_WRITE,
+                               MAP_SHARED,
+                               sockscf.hostfd,
+                               1)) == MAP_FAILED)
+      serr("%s: failed to mmap(2) hostcache of size %lu",
+           function, (unsigned long)(sizeof(*hostcache) * SOCKD_HOSTCACHE));
 }
 
-static char **
-listrealloc(old, new, length)
-	char ***old;
-	const char ***new;
-	int length;
-{
-	int i, oldi, newi;
-
-	/* entries we can reallocate, starting at 0. */
-	oldi = 0;
-	if (*old != NULL)
-		while ((*old)[oldi] != NULL)
-			++oldi;
-
-	newi = 0;
-	while ((*new)[newi] != NULL)
-		++newi;
-
-	for (i = newi; i < oldi; ++i)
-		free((*old)[i]);
-
-	if ((*old = (char **)realloc(*old, sizeof(**new) * (newi + 1))) == NULL)
-		return NULL;
-
-	for (newi = 0; (*new)[newi] != NULL; ++newi, --oldi) {
-		if (((*old)[newi] = (char *)realloc(oldi > 0 ? (*old)[newi] : NULL,
-		length < 0 ? (strlen((*new)[newi]) + 1) : length)) == NULL)
-			return NULL;
-
-		if (length < 0)
-			strcpy((*old)[newi], (*new)[newi]);
-		else
-			memcpy((*old)[newi], (*new)[newi], (size_t)length);
-	}
-	(*old)[newi] = NULL;
-
-	return *old;
-}
-
-#if SOCKS_SERVER
 
 struct hostent *
 cgethostbyname(name)
-	const char *name;
+   const char *name;
 {
-	const char *function = "cgethostbyname()";
-	static struct {
-		unsigned				allocated:1;
-		char					host[MAXHOSTNAMELEN];
-		time_t				written;
-		struct hostent		hostent;
-	} table[SOCKD_HOSTCACHE], *freehost;
-	static unsigned int hit, miss, count;
-	const time_t timenow = time(NULL);
-	const int hashi = hosthash(name, ELEMENTS(table));
-	size_t i;
-	struct hostent *hostent;
+   const char *function = "cgethostbyname()";
+   static hostentry_t hostentry;
+   static dnsinfo_t resmem;
+   static char *nullist[] = { NULL }, *addrv[HOSTENT_MAX_ALIASES + 1];
+   struct addrinfo *ainfo, *next, hints;
+   struct hostent he;
+   size_t addrc;
+   int rc;
 
-#if SOCKD_CACHESTAT
-	if (++count % SOCKD_CACHESTAT == 0)
-		slog(LOG_INFO, "%s: hit: %d, miss: %d", function, hit, miss);
-#endif /* SOCKD_CACHESTAT */
+   bzero(&hints, sizeof(hints));
+   hints.ai_flags    = AI_CANONNAME;
+   hints.ai_family   = AF_INET;
 
-	for (i = hashi, freehost = NULL; i < ELEMENTS(table); ++i) {
-		if (!table[i].allocated) {
-			if (freehost == NULL)
-				freehost = &table[i];
-			continue;
-		}
+   if ((rc = cgetaddrinfo(name, NULL, &hints, &ainfo, &resmem)) != 0) {
+      char visbuf[MAXHOSTNAMELEN * 4];
 
-		if (strcasecmp(table[i].host, name) == 0) {
-			if (difftime(timenow, table[i].written) >= SOCKD_CACHETIMEOUT) {
-				freehost = &table[i];
-				break;
-			}
-			++hit;
-			return &table[i].hostent;
-		}
-	}
-	++miss;
+      slog(LOG_DEBUG, "%s: getaddrinfo(%s) failed: %s",
+           function,
+           str2vis(name, strlen(name), visbuf, sizeof(visbuf)),
+           gai_strerror(rc));
 
-	if ((hostent = gethostbyname(name)) == NULL)
-		return NULL;
+      h_errno = gai2h_errno(rc);
+      return NULL;
+   }
 
-	if (freehost == NULL)
-		for (i = hashi, freehost = &table[i]; i < ELEMENTS(table); ++i) {
-			if (difftime(timenow, table[i].written) >= SOCKD_CACHETIMEOUT) {
-				freehost = &table[i];
-				break;
-			}
+   SASSERTX(ainfo != NULL);
 
-			if (freehost->written < table[i].written) {
-				freehost = &table[i]; /* oldest. */
-				break;
-			}
-		}
+   addrc = 0;
+   for (next = ainfo; next != NULL; next = next->ai_next) {
+      SASSERTX(addrc < ELEMENTS(addrv));
+      SASSERTX(next->ai_addr    != NULL);
+      SASSERTX(next->ai_family  == next->ai_addr->sa_family);
 
-	if (hostentupdate(&freehost->hostent, hostent) == NULL) {
-		freehost->allocated = 0;
-		slog(LOG_WARNING, "%s: %s", NOMEM, function);
-		return NULL;
-	}
+      if (next->ai_addr->sa_family == AF_INET) {
+         he.h_addrtype     = next->ai_addr->sa_family;
+         he.h_length       = sizeof(struct in_addr);
+         addrv[addrc++]    = (char *)&TOIN(next->ai_addr)->sin_addr;
 
-	SASSERTX(strlen(name) < sizeof(freehost->host));
-	strcpy(freehost->host, name);
-	time(&freehost->written);
-	freehost->allocated = 1;
+         if (addrc + 1 >= ELEMENTS(addrv))
+            break;
+      }
+      else
+         slog(LOG_DEBUG,
+              "%s: ai_family = %d.  Skipped", function, next->ai_family);
+   }
 
-	return &freehost->hostent;
+   if (addrc == 0) {
+      h_errno = NO_ADDRESS;
+      return NULL;
+   }
+
+   addrv[addrc] = NULL;
+
+   he.h_name         = ainfo->ai_canonname;
+   he.h_aliases      = nullist;
+   he.h_addr_list    = addrv;
+
+   hostentcopy(&hostentry, &he);
+
+   return &hostentry.hostent;
 }
+
 
 struct hostent *
 cgethostbyaddr(addr, len, type)
-	const char *addr;
-	int len;
-	int type;
+   const void *addr;
+   socklen_t len;
+   int type;
 {
-	const char *function = "cgethostbyaddr()";
-	static struct {
-		unsigned			allocated:1;
-		in_addr_t			addr;
-		time_t				written;
-		struct hostent		hostent;
-	} table[SOCKD_ADDRESSCACHE], *freehost;
-	static unsigned long int hit, miss, count;
-	const time_t timenow = time(NULL);
-	/* LINTED pointer casts may be troublesome */
-	const int hashi
-	= addrhash(((const struct in_addr *)addr)->s_addr, ELEMENTS(table));
-	size_t i;
-	struct hostent *hostent;
+   const char *function = "cgethostbyaddr()";
+   static hostentry_t hostentry;
+   static char *nullist[] = { NULL }, *onelist[2];
+   struct sockaddr_storage sa;
+   struct hostent he;
+   char host[MAXHOSTNAMELEN];
+   int rc;
 
-#if SOCKD_CACHESTAT
-	if (++count % SOCKD_CACHESTAT == 0)
-		slog(LOG_INFO, "%s: hit: %d, miss: %d", function, hit, miss);
-#endif /* SOCKD_CACHESTAT */
+   SASSERTX(type == AF_INET);
+   SASSERTX(len  == sizeof(struct in_addr));
 
-	for (i = hashi, freehost = NULL; i < ELEMENTS(table); ++i) {
-		if (!table[i].allocated) {
-			if (freehost == NULL)
-				freehost = &table[i];
-			continue;
-		}
+   bzero(&sa, sizeof(sa));
+   SET_SOCKADDR(&sa, AF_INET);
+   TOIN(&sa)->sin_addr = *(const struct in_addr *)addr;
 
-		/* LINTED pointer casts may be troublesome */
-		if (table[i].addr == ((const struct in_addr *)addr)->s_addr) {
-			if (difftime(timenow, table[i].written) >= SOCKD_CACHETIMEOUT) {
-				freehost = &table[i];
-				break;
-			}
-			++hit;
-			return &table[i].hostent;
-		}
-	}
-	++miss;
+   if ((rc = cgetnameinfo(TOSA(&sa),
+                          salen(sa.ss_family),
+                          host,
+                          sizeof(host),
+                          NULL,
+                          0,
+                          NI_NAMEREQD)) != 0) {
+      slog(LOG_DEBUG, "%s: cgetnameinfo(%s) failed: %s",
+           function, sockaddr2string(&sa, NULL, 0), gai_strerror(rc));
 
-	if ((hostent = gethostbyaddr(addr, len, type)) == NULL)
-		return NULL;
+      h_errno = gai2h_errno(rc);
+      return NULL;
+   }
 
-	if (freehost == NULL)
-		for (i = hashi, freehost = &table[i]; i < ELEMENTS(table); ++i) {
-			if (difftime(timenow, table[i].written) >= SOCKD_CACHETIMEOUT) {
-				freehost = &table[i];
-				break;
-			}
+   he.h_name         = host;
+   he.h_aliases      = nullist;
+   he.h_addrtype     = sa.ss_family;
+   he.h_length       = sizeof(struct in_addr);
+   he.h_addr_list    = onelist;
+   he.h_addr_list[0] = (char *)&TOIN(&sa)->sin_addr;
+   he.h_addr_list[1] = NULL;
 
-			if (freehost->written < table[i].written) {
-				freehost = &table[i]; /* oldest. */
-				break;
-			}
-		}
+   hostentcopy(&hostentry, &he);
 
-	if (hostentupdate(&freehost->hostent, hostent) == NULL) {
-		freehost->allocated = 0;
-		slog(LOG_WARNING, "%s: %s", NOMEM, function);
-		return NULL;
-	}
-
-	/* LINTED pointer casts may be troublesome */
-	freehost->addr = ((const struct in_addr *)addr)->s_addr;
-	time(&freehost->written);
-	freehost->allocated = 1;
-
-	return &freehost->hostent;
+   return &hostentry.hostent;
 }
 
-static int
+static hostentry_t *
+hostentcopy(to, from)
+   hostentry_t *to;
+   const struct hostent *from;
+{
+   const char *function = "hostentcopy()";
+   const size_t maxaliases = ELEMENTS(to->h_aliases);
+   size_t i;
+
+   if ((size_t)from->h_length > sizeof(to->h_addr_listmem[0])) {
+      swarnx("%s: h_length of %s is %d bytes long, max expected is %lu",
+             function,
+             from->h_name,
+             from->h_length,
+             (unsigned long)sizeof(to->h_addr_listmem[0]));
+
+      return NULL;
+   }
+
+   if (strlen(from->h_name) >= sizeof(to->h_name)) {
+      swarnx("%s: name %s is %lu bytes long, max expected is %lu",
+             function,
+             from->h_name,
+             (unsigned long)strlen(from->h_name),
+             (unsigned long)sizeof(to->h_name) - 1);
+
+      return NULL;
+   }
+
+   to->hostent.h_addrtype = from->h_addrtype;
+   to->hostent.h_length   = from->h_length;
+   to->hostent.h_name     = to->h_name;
+   strcpy(to->hostent.h_name, from->h_name);
+
+   for (i = 0; i < (maxaliases - 1) && from->h_aliases[i] != NULL; ++i) {
+      if (strlen(from->h_aliases[i]) >= sizeof(to->h_aliasesmem[0])) {
+         swarnx("%s: name %s is %lu bytes long, max expected is %lu",
+                function,
+                from->h_aliases[i],
+                (unsigned long)strlen(from->h_aliases[i]),
+                (unsigned long)sizeof(to->h_aliases[0]) - 1);
+
+         return NULL;
+      }
+
+      to->h_aliases[i] = to->h_aliasesmem[i];
+      strcpy(to->h_aliases[i], from->h_aliases[i]);
+   }
+
+   to->hostent.h_aliases     = to->h_aliases;
+   to->hostent.h_aliases[i]  = NULL;
+
+   for (i = 0; i < (maxaliases - 1) && from->h_addr_list[i] != NULL; ++i) {
+      to->h_addr_list[i] = to->h_addr_listmem[i];
+      memcpy(to->h_addr_list[i], from->h_addr_list[i], (size_t)from->h_length);
+   }
+
+   to->hostent.h_addr_list    = to->h_addr_list;
+   to->hostent.h_addr_list[i] = NULL;
+
+   return to;
+}
+
+static size_t
 hosthash(name, size)
-	const char *name;
-	size_t size;
+   const char *name;
+   const size_t size;
 {
-	char *end;
-	unsigned int value;
+   unsigned int value;
+   char *end;
 
-	/* end at second dot. */
-	if ((end = strchr(name, '.')) != NULL)
-		end = strchr(end, '.');
-	if (end == NULL)
-		end = strchr(name, NUL);
+   if (size < MIN_HASH_SIZE)
+      return 0;
 
-	SASSERTX(name <= end);
-	value = 0;
-	while (name != end)
-		value = (value << 5) + *name++;	/* MAW - DS&A: Horner's rule. */
+   /* don't bother scanning past second dot. */
+   if ((end = strchr(name, '.')) != NULL)
+      end = strchr(end + 1, '.');
 
-	return value % size;
+   if (end == NULL) /* zero or one dot in name. */
+      end = strchr(name, NUL);
+
+   SASSERTX(name <= end);
+
+   value = 0;
+   while (name != end) {
+      value = (value << 5) + *name;   /* MAW - DS&A: Horner's rule. */
+      ++name;
+   }
+
+   return value % size;
+}
+
+static size_t
+addrhash(addr, size)
+   const struct sockaddr_storage *addr;
+   const size_t size;
+{
+   size_t sum;
+
+   if (size < MIN_HASH_SIZE)
+      /*
+       * Assume this is so small a cache that it's better to just scan
+       * it sequentially, rather than risk premature expiry of cached
+       * DNS-entries.
+       */
+      return 0;
+
+   switch (addr->ss_family) {
+      case AF_INET:
+         sum = ntohl(TOCIN(addr)->sin_addr.s_addr);
+         break;
+
+      case AF_INET6: {
+         const unsigned char *byte   = TOCIN6(addr)->sin6_addr.s6_addr;
+         const size_t len            = sizeof(TOCIN6(addr)->sin6_addr.s6_addr),
+                      digits_wanted  = 4;
+         ssize_t i;
+         size_t digits_summed;
+
+         sum           = 0;
+         digits_summed = 0;
+         i             = len - 1;
+
+         while (i >= 0 && digits_summed < digits_wanted) {
+            if (byte[i] != 0) {
+               sum += byte[i];
+               ++digits_summed;
+            }
+
+            --i;
+         }
+
+         break;
+      }
+
+      default:
+         SERRX(addr->ss_family);
+   }
+
+   return sum % size;
+}
+
+dnsinfo_t *
+getoldest(starti)
+   const size_t starti;
+{
+   dnsinfo_t *oldest;
+   size_t i;
+
+   for (i = starti, oldest = NULL; i < SOCKD_HOSTCACHE; ++i) {
+      if (oldest == NULL
+      ||  hostcache[i].written < oldest->written)
+         oldest = &hostcache[i];
+   }
+
+   SASSERTX(oldest != NULL);
+   return oldest;
 }
 
 static int
-addrhash(addr, size)
-	in_addr_t addr;
-	size_t size;
+name_matches_cache(ce, name, service, hints)
+   const dnsinfo_t *ce; /* CacheEntry. */
+   const char *name;
+   const char *service;
+   const struct addrinfo *hints;
 {
+   if (ce->allocated && ce->key == id_name) {
+      if (hints == NULL) {
+         if (ce->data.getaddr.hints != NULL)
+            return 0;
+      }
+      else {
+         if (ce->data.getaddr.hints == NULL)
+            return 0;
 
-	return addr % size;
+         if (memcmp(ce->data.getaddr.hints, hints, sizeof(*hints)) != 0)
+            return 0;
+      }
+
+      if  (strcasecmp(ce->id.name, name) != 0)
+         return 0;
+
+      if (service == NULL) {
+         if (*ce->service != NUL)
+            return 0;
+      }
+      else {
+         if (*ce->service == NUL)
+            return 0;
+
+         if (strcasecmp(ce->service, service) != 0)
+            return 0;
+      }
+
+      /* all matches */
+      return 1;
+   }
+
+   return 0;
 }
 
-static struct hostent *
-hostentupdate(old, new)
-	struct hostent *old;
-	const struct hostent *new;
+static int
+addr_matches_cache(ce, addr, flags)
+   const dnsinfo_t *ce; /* cache entry. */
+   const struct sockaddr *addr;
+   const int flags;
 {
+   if (ce->allocated
+   &&  ce->data.getname.flags == flags
+   &&  ce->key                == id_addr
+   &&  sockaddrareeq(&ce->id.addr, TOCSS(addr), 0))
+      return 1;
 
-	if ((old->h_name = (char *)realloc(old->h_name, strlen(new->h_name) + 1))
-	== NULL)
-		return NULL;
-	strcpy(old->h_name, new->h_name);
-
-	if (listrealloc(&old->h_aliases, (const char ***)&new->h_aliases, -1)
-	== NULL)
-		return NULL;
-
-	old->h_addrtype	= new->h_addrtype;
-	old->h_length		= new->h_length;
-
-	if (listrealloc(&old->h_addr_list, (const char ***)&new->h_addr_list,
-	new->h_length) == NULL)
-		return NULL;
-
-	return old;
+   return 0;
 }
 
-#endif /* SOCKS_SERVER */
+static int
+addrisinlist(addr, ailist, ailist_last)
+   const struct sockaddr *addr;
+   struct addrinfo *ailist;
+   struct addrinfo *ailist_last;
+{
+   const char *function = "addrisinlist()";
+   struct addrinfo *ai_next_original = ailist_last->ai_next;
+   int isinlist;
+
+   ailist_last->ai_next = NULL;
+
+   switch(addr->sa_family) {
+      case AF_INET: {
+         struct in_addr mask;/* not const due to Solaris's "struct in struct" */
+
+         mask.s_addr = htonl(IPV4_FULLNETMASK);
+
+         isinlist = ipv4_addrisinlist(&TOCIN(addr)->sin_addr, &mask, ailist)
+                     == NULL ? 0 : 1;
+         break;
+      }
+
+      case AF_INET6: {
+         const unsigned int mask = { IPV6_NETMASKBITS };
+
+         isinlist = ipv6_addrisinlist(&TOCIN6(addr)->sin6_addr, mask, ailist)
+                    == NULL ? 0 : 1;
+         break;
+      }
+
+      default:
+         slog(PRERELEASE ? LOG_NOTICE /* does this ever happen? */ : LOG_DEBUG,
+              "%s: unknown/unused sa_family %d in addrinfo struct",
+              function, addr->sa_family);
+
+         isinlist = 1;
+   }
+
+   ailist_last->ai_next = ai_next_original;
+
+   return isinlist;
+}
+#endif /* !SOCKS_CLIENT */

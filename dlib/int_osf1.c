@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 1997, 1998, 1999, 2000, 2001, 2002, 2003
+ * Copyright (c) 1997, 1998, 1999, 2000, 2001, 2008, 2009, 2010, 2011
  *      Inferno Nettverk A/S, Norway.  All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
@@ -48,7 +48,7 @@
 #if SOCKSLIBRARY_DYNAMIC
 
 static const char rcsid[] =
-"$Id: int_osf1.c,v 1.12 2003/07/01 13:21:12 michaels Exp $";
+"$Id: int_osf1.c,v 1.24 2012/06/01 20:23:05 karls Exp $";
 
 #undef accept
 #undef getpeername
@@ -59,237 +59,233 @@ static const char rcsid[] =
 #undef sendmsg
 #undef writev
 
-	/* the system calls. */
+   /* the system calls. */
 
 int
 sys_Eaccept(s, addr, addrlen)
-	int s;
-	struct sockaddr * addr;
-	socklen_t *addrlen;
+   int s;
+   struct sockaddr * addr;
+   socklen_t *addrlen;
 {
-	int rc;
-	int (*function)(int s, struct sockaddr * addr, socklen_t *addrlen);
+   int rc;
+   int (*function)(int s, struct sockaddr *addr, socklen_t *addrlen);
 
-	SYSCALL_START(s);
-	function = symbolfunction(SYMBOL_EACCEPT);
-	rc = function(s, addr, addrlen);
-	SYSCALL_END(s);
-	return rc;
+   socks_syscall_start(s);
+   function = symbolfunction(SYMBOL_EACCEPT);
+   rc = function(s, addr, addrlen);
+   socks_syscall_end(s);
+   return rc;
 }
 
 int
 sys_Egetpeername(s, name, namelen)
-	int s;
-	struct sockaddr * name;
-	socklen_t *namelen;
+   int s;
+   struct sockaddr * name;
+   socklen_t *namelen;
 {
-	int rc;
-	int (*function)(int s, const struct sockaddr * name, socklen_t *namelen);
+   int rc;
+   int (*function)(int s, const struct sockaddr *name, socklen_t *namelen);
 
-	SYSCALL_START(s);
-	function = symbolfunction(SYMBOL_EGETPEERNAME);
-	rc = function(s, name, namelen);
-	SYSCALL_END(s);
-	return rc;
+   socks_syscall_start(s);
+   function = symbolfunction(SYMBOL_EGETPEERNAME);
+   rc = function(s, name, namelen);
+   socks_syscall_end(s);
+   return rc;
 }
 
 int
 sys_Egetsockname(s, name, namelen)
-	int s;
-	struct sockaddr * name;
-	socklen_t *namelen;
+   int s;
+   struct sockaddr * name;
+   socklen_t *namelen;
 {
-	int rc;
-	int (*function)(int s, const struct sockaddr * name, socklen_t *namelen);
+   int rc;
+   int (*function)(int s, const struct sockaddr *name, socklen_t *namelen);
 
-	SYSCALL_START(s);
-	function = symbolfunction(SYMBOL_EGETSOCKNAME);
-	rc = function(s, name, namelen);
-	SYSCALL_END(s);
-	return rc;
+   socks_syscall_start(s);
+   function = symbolfunction(SYMBOL_EGETSOCKNAME);
+   rc = function(s, name, namelen);
+   socks_syscall_end(s);
+   return rc;
 }
+
 ssize_t
 sys_Ereadv(d, iov, iovcnt)
-	int d;
-	const struct iovec *iov;
-	int iovcnt;
+   int d;
+   const struct iovec *iov;
+   int iovcnt;
 {
-	ssize_t rc;
-	int (*function)(int d, const struct iovec *iov, int iovcnt);
+   ssize_t rc;
+   int (*function)(int d, const struct iovec *iov, int iovcnt);
 
-	SYSCALL_START(d);
-	function = symbolfunction(SYMBOL_EREADV);
-	rc = function(d, iov, iovcnt);
-	SYSCALL_END(d);
-	return rc;
+   socks_syscall_start(d);
+   function = symbolfunction(SYMBOL_EREADV);
+   rc = function(d, iov, iovcnt);
+   socks_syscall_end(d);
+   return rc;
 }
 
 int
 sys_Erecvfrom(s, buf, len, flags, from, fromlen)
-	int s;
-	void *buf;
-	size_t len;
-	int flags;
-	struct sockaddr * from;
-	size_t *fromlen;
+   int s;
+   void *buf;
+   size_t len;
+   int flags;
+   struct sockaddr * from;
+   size_t *fromlen;
 {
-	int rc;
-	int (*function)(int s, void *buf, size_t len, int flags,
-					    struct sockaddr * from, socklen_t *fromlen);
+   int rc;
+   int (*function)(int s, void *buf, size_t len, int flags,
+                   struct sockaddr *from, socklen_t *fromlen);
 
-	SYSCALL_START(s);
-	function = symbolfunction(SYMBOL_ERECVFROM);
-	rc = function(s, buf, len, flags, from, fromlen);
-	SYSCALL_END(s);
-	return rc;
+   socks_syscall_start(s);
+   function = symbolfunction(SYMBOL_ERECVFROM);
+   rc = function(s, buf, len, flags, from, fromlen);
+   socks_syscall_end(s);
+   return rc;
 }
 
 ssize_t
 sys_Erecvmsg(s, msg, flags)
-	int s;
-	struct msghdr *msg;
-	int flags;
+   int s;
+   struct msghdr *msg;
+   int flags;
 {
-	ssize_t rc;
-	int (*function)(int s, struct msghdr *msg, int flags);
+   ssize_t rc;
+   int (*function)(int s, struct msghdr *msg, int flags);
 
-	SYSCALL_START(s);
-	function = symbolfunction(SYMBOL_ERECVMSG);
-	rc = function(s, msg, flags);
-	SYSCALL_END(s);
-	return rc;
+   socks_syscall_start(s);
+   function = symbolfunction(SYMBOL_ERECVMSG);
+   rc = function(s, msg, flags);
+   socks_syscall_end(s);
+   return rc;
 }
 
 ssize_t
 sys_Esendmsg(s, msg, flags)
-	int s;
-	const struct msghdr *msg;
-	int flags;
+   int s;
+   const struct msghdr *msg;
+   int flags;
 {
-	ssize_t rc;
-	int (*function)(int s, const struct msghdr *msg, int flags);
+   ssize_t rc;
+   int (*function)(int s, const struct msghdr *msg, int flags);
 
-	SYSCALL_START(s);
-	function = symbolfunction(SYMBOL_ESENDMSG);
-	rc = function(s, msg, flags);
-	SYSCALL_END(s);
-	return rc;
+   socks_syscall_start(s);
+   function = symbolfunction(SYMBOL_ESENDMSG);
+   rc = function(s, msg, flags);
+   socks_syscall_end(s);
+   return rc;
 }
-
 
 ssize_t
 sys_Ewritev(d, iov, iovcnt)
-	int d;
-	const struct iovec *iov;
-	int iovcnt;
+   int d;
+   const struct iovec *iov;
+   int iovcnt;
 {
-	ssize_t rc;
-	int (*function)(int d, const struct iovec *buf, int iovcnt);
+   ssize_t rc;
+   int (*function)(int d, const struct iovec *buf, int iovcnt);
 
-	SYSCALL_START(d);
-	function = symbolfunction(SYMBOL_EWRITEV);
-	rc = function(d, iov, iovcnt);
-	SYSCALL_END(d);
-	return rc;
+   socks_syscall_start(d);
+   function = symbolfunction(SYMBOL_EWRITEV);
+   rc = function(d, iov, iovcnt);
+   socks_syscall_end(d);
+   return rc;
 }
 
-	/*
-	 * the interpositioned functions.
-	 */
-
+   /*
+    * the interpositioned functions.
+    */
 
 int
 _Eaccept(s, addr, addrlen)
-	int s;
-	struct sockaddr * addr;
-	socklen_t *addrlen;
+   int s;
+   struct sockaddr * addr;
+   socklen_t *addrlen;
 {
-	if (ISSYSCALL(s))
-		return sys_Eaccept(s, addr, addrlen);
-	return Raccept(s, addr, addrlen);
+   if (socks_issyscall(s, SYMBOL__EACCEPT))
+      return sys_Eaccept(s, addr, addrlen);
+   return Raccept(s, addr, addrlen);
 }
+
 int
 _Egetpeername(s, name, namelen)
-	int s;
-	struct sockaddr * name;
-	socklen_t *namelen;
+   int s;
+   struct sockaddr * name;
+   socklen_t *namelen;
 {
-	if (ISSYSCALL(s))
-		return sys_Egetpeername(s, name, namelen);
-	return Rgetpeername(s, name, namelen);
+   if (socks_issyscall(s, SYMBOL__EGETPEERNAME))
+      return sys_Egetpeername(s, name, namelen);
+   return Rgetpeername(s, name, namelen);
 }
 
 int
 _Egetsockname(s, name, namelen)
-	int s;
-	struct sockaddr * name;
-	socklen_t *namelen;
+   int s;
+   struct sockaddr * name;
+   socklen_t *namelen;
 {
-	if (ISSYSCALL(s))
-		return sys_Egetsockname(s, name, namelen);
-	return Rgetsockname(s, name, namelen);
+   if (socks_issyscall(s, SYMBOL__EGETSOCKNAME))
+      return sys_Egetsockname(s, name, namelen);
+   return Rgetsockname(s, name, namelen);
 }
-
 
 ssize_t
 _Ereadv(d, iov, iovcnt)
-	int d;
-	const struct iovec *iov;
-	int iovcnt;
+   int d;
+   const struct iovec *iov;
+   int iovcnt;
 {
-	if (ISSYSCALL(d))
-		return sys_Ereadv(d, iov, iovcnt);
-	return Rreadv(d, iov, iovcnt);
+   if (socks_issyscall(d, SYMBOL__EREADV))
+      return sys_Ereadv(d, iov, iovcnt);
+   return Rreadv(d, iov, iovcnt);
 }
-
 
 ssize_t
 _Erecvfrom(s, buf, len, flags, from, fromlen)
-	int s;
-	void *buf;
-	size_t len;
-	int flags;
-	struct sockaddr * from;
-	size_t *fromlen;
+   int s;
+   void *buf;
+   size_t len;
+   int flags;
+   struct sockaddr * from;
+   size_t *fromlen;
 {
-	if (ISSYSCALL(s))
-		return sys_Erecvfrom(s, buf, len, flags, from, fromlen);
-	return Rrecvfrom(s, buf, len, flags, from, fromlen);
+   if (socks_issyscall(s, SYMBOL__ERECVFROM))
+      return sys_Erecvfrom(s, buf, len, flags, from, fromlen);
+   return Rrecvfrom(s, buf, len, flags, from, fromlen);
 }
 
 ssize_t
 _Erecvmsg(s, msg, flags)
-	int s;
-	struct msghdr *msg;
-	int flags;
+   int s;
+   struct msghdr *msg;
+   int flags;
 {
-	if (ISSYSCALL(s))
-		return sys_Erecvmsg(s, msg, flags);
-	return Rrecvmsg(s, msg, flags);
+   if (socks_issyscall(s, SYMBOL__ERECVMSG))
+      return sys_Erecvmsg(s, msg, flags);
+   return Rrecvmsg(s, msg, flags);
 }
-
-
 
 ssize_t
 _Ewritev(d, iov, iovcnt)
-	int d;
-	const struct iovec *iov;
-	int iovcnt;
+   int d;
+   const struct iovec *iov;
+   int iovcnt;
 {
-	if (ISSYSCALL(d))
-		return sys_Ewritev(d, iov, iovcnt);
-	return Rwritev(d, iov, iovcnt);
+   if (socks_issyscall(d, SYMBOL__EWRITEV))
+      return sys_Ewritev(d, iov, iovcnt);
+   return Rwritev(d, iov, iovcnt);
 }
 
 ssize_t
 _Esendmsg(s, msg, flags)
-	int s;
-	const struct msghdr *msg;
-	int flags;
+   int s;
+   const struct msghdr *msg;
+   int flags;
 {
-	if (ISSYSCALL(s))
-		return sys_Esendmsg(s, msg, flags);
-	return Rsendmsg(s, msg, flags);
+   if (socks_issyscall(s, SYMBOL__ESENDMSG))
+      return sys_Esendmsg(s, msg, flags);
+   return Rsendmsg(s, msg, flags);
 }
 
 #endif /* SOCKSLIBRARY_DYNAMIC */

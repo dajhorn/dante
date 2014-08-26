@@ -1,5 +1,6 @@
 /*
- * Copyright (c) 1997, 1998, 1999, 2000, 2001, 2002, 2003
+ * Copyright (c) 1997, 1998, 1999, 2000, 2001, 2005, 2008, 2009, 2011, 2012,
+ *               2013
  *      Inferno Nettverk A/S, Norway.  All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
@@ -44,103 +45,279 @@
 #include "common.h"
 
 static const char rcsid[] =
-"$Id: authneg.c,v 1.59 2005/10/13 12:17:17 michaels Exp $";
+"$Id: authneg.c,v 1.128 2013/10/27 15:24:42 karls Exp $";
 
 int
-negotiate_method(s, packet)
-	int s;
-	struct socks_t *packet;
+negotiate_method(s, packet, route, emsg, emsglen)
+   int s;
+   socks_t *packet;
+   route_t *route;
+   char *emsg;
+   const size_t emsglen;
 {
-	const char *function = "negotiate_method()";
-	unsigned char *name = NULL, *password = NULL;
-	int rc;
-	unsigned char request[ 1						/* version					*/
-								+ 1						/* number of methods.	*/
-								+ AUTHMETHOD_MAX		/* the methods.			*/
-								];
-	size_t requestlen = 0;	
+   const char *function = "negotiate_method()";
+   ssize_t rc;
+   size_t i, requestlen;
+   unsigned char *name = NULL, *password = NULL;
+   unsigned char request[ 1                  /* version                       */
+                        + 1                  /* number of methods to offer.   */
+                        + METHODS_KNOWN      /* methods we offer server.      */
+                        ];
+   unsigned char response[ 1   /* version.                     */
+                         + 1   /* method selected by server.   */
+                         ];
+   char buf[256], lemsg[512] /* local emesg. */;
+   int intmethodv[METHODS_KNOWN];
 
-	unsigned char response[ 1	/* version.				*/
-								 + 1	/* selected method.	*/
-								 ];
+   if (sockscf.option.debug)
+      slog(LOG_DEBUG, "%s: fd %d, %s", function, s, socket2string(s, NULL, 0));
 
-	SASSERTX(packet->gw.state.methodc > 0);
+#if !SOCKS_CLIENT && HAVE_GSSAPI
+   switch (packet->req.auth->method) {
+      case AUTHMETHOD_GSSAPI:
+         /*
+          * Nothing from gssapistate with client we are currently
+          * offering upstream proxyserver, so reset authmethod to none
+          * so as to not confuse things and make any part of the code
+          * try to think this gssapi state relates to the upstream
+          * proxy.
+          */
+         bzero(&packet->req.auth->mdata.gssapi,
+               sizeof(packet->req.auth->mdata.gssapi));
 
-	/* create request packet. */
+         packet->req.auth->method = AUTHMETHOD_NOTSET;
+         break;
+   }
+#endif /* !SOCKS_CLIENT && HAVE_GSSAPI */
 
-	request[requestlen++] = packet->req.version;
 
-	if (packet->auth.method != AUTHMETHOD_NOTSET) {
-		/* authmethod already fixed. */
-		request[requestlen++] = (unsigned char)1;
-		request[requestlen++] = (unsigned char)packet->auth.method;
+   if (packet->req.version == PROXY_SOCKS_V4) {
+      slog(LOG_DEBUG,
+           "%s: no method negotiate in %s.  Setting authmethod to %s",
+           function,
+           proxyprotocol2string(packet->req.version),
+           method2string(AUTHMETHOD_NONE));
 
-		switch (packet->auth.method) {
-			case AUTHMETHOD_UNAME:
-				name 		= packet->auth.mdata.uname.name;
-				password = packet->auth.mdata.uname.password;
-				break;
-		}
-	}
-	else {
-		request[requestlen++]	= (unsigned char)packet->gw.state.methodc;
-		for (rc = 0; rc < (int)packet->gw.state.methodc; ++rc)
-			request[requestlen++] 
-			= (unsigned char)packet->gw.state.methodv[rc];
-	}
 
-	/* send list over methods we support */
-	if (writen(s, request, requestlen, &packet->auth) != (ssize_t)requestlen)
-		return -1;
+      packet->req.auth->method = AUTHMETHOD_NONE;
+      packet->res.auth->method = AUTHMETHOD_NONE;
 
-	/* read servers response for method it wants to use */
-	if ((rc = readn(s, response, sizeof(response), &packet->auth))
-	!= sizeof(response)){
-		swarn("%s: readn(), %d out of %d", function,rc, sizeof(response));
-		return -1;
-	}
+      return 0;
+   }
 
-	if (request[AUTH_VERSION] != response[AUTH_VERSION]) {
-		swarnx("%s: got replyversion %d, expected %d",
-      function, response[AUTH_VERSION], request[AUTH_VERSION]);
-		errno = ECONNREFUSED;
-		return -1;
-	}
+   SASSERTX(packet->gw.state.smethodc > 0);
+   SASSERTX(packet->gw.state.smethodc <= METHODS_KNOWN);
 
-	packet->version		= request[AUTH_VERSION];
-	packet->auth.method	= response[AUTH_METHOD];
+   /*
+    * create request packet.
+    * version numberOfmethods methods ...
+    */
 
-	switch (packet->auth.method) {
-		case AUTHMETHOD_NONE:
-			rc = 0;
-			break;
+   requestlen            = 0;
+   request[requestlen++] = packet->req.version;
 
-		case AUTHMETHOD_UNAME:
-			if (clientmethod_uname(s, &packet->gw.host, packet->req.version, name,
-			password) == 0)
-				rc = 0;
-			else
-				rc = -1;
-			break;
+   SASSERTX(requestlen == AUTH_NMETHODS);
+   request[requestlen++] = (unsigned char)0;
+   SASSERTX(request[AUTH_NMETHODS] == 0);
 
-		case AUTHMETHOD_NOACCEPT:
-			swarnx("%s: server accepted no authentication method", function);
-			rc = -1;
-			break;
+   /*
+    * Count and add the methods we support and are configured to offer
+    * this server.
+    */
+   for (i = 0; i < packet->gw.state.smethodc; ++i) {
+      if (packet->req.auth->method != AUTHMETHOD_NOTSET) {
+         /*
+          * Must be doing serverchaining.  Not all methods we are
+          * configured to support for this route may be supported
+          * for this particular client.  E.g., if the client has
+          * not provided us with a username/password, we can not
+          * provide the upstream proxy with it either, so don't
+          * offer it.
+          */
 
-		default:
-			swarnx("%s: server selected method not offered: %d",
-			function, response[AUTH_METHOD]);
-			rc = -1;
-	}
+         SASSERTX(!SOCKS_CLIENT);
 
-	if (rc == 0) {
-		slog(LOG_DEBUG,
-		"%s: established socks v%d connection using authentication method %d",
-		function, packet->version, packet->auth.method);
-	}
-	else
-		errno = ECONNREFUSED;
+         switch (packet->gw.state.smethodv[i]) {
+            case AUTHMETHOD_NONE:
+               break; /* ok. */
 
-	return rc;
+            case AUTHMETHOD_UNAME:
+               if (packet->req.auth->method != AUTHMETHOD_UNAME)
+                  continue; /* don't offer this method. */
+
+               break;
+
+            case AUTHMETHOD_GSSAPI:
+               break; /*
+                       * ok?  Can't forward gssapi/kerberos credentials,
+                       * but operator should be able to set up a
+                       * things so we can initiate our own gssapi
+                       * session to the upsteam proxy.
+                       */
+
+            default:
+               SERRX(packet->gw.state.smethodv[i]);
+         }
+      }
+
+      request[requestlen++] = (unsigned char)packet->gw.state.smethodv[i];
+      ++request[AUTH_NMETHODS];
+   }
+
+   SASSERTX(request[AUTH_NMETHODS] > 0);
+   SASSERTX(request[AUTH_NMETHODS] <= METHODS_KNOWN);
+   SASSERTX(request[AUTH_NMETHODS] <= ELEMENTS(intmethodv));
+
+   charmethod2intmethod((ssize_t)request[AUTH_NMETHODS],
+                        &request[AUTH_FIRSTMETHOD],
+                        intmethodv);
+
+   slog(LOG_NEGOTIATE, "%s: offering proxy server #%d method%s: %s",
+        function,
+        request[AUTH_NMETHODS],
+        request[AUTH_NMETHODS] == 1 ? "" : "s",
+        methods2string(request[AUTH_NMETHODS], intmethodv, buf, sizeof(buf)));
+
+   if (socks_sendton(s,
+                     request,
+                     requestlen,
+                     requestlen,
+                     0,
+                     NULL,
+                     0,
+                     NULL,
+                     NULL) != (ssize_t)requestlen) {
+      snprintf(emsg, emsglen,
+               "could not offer list of auth methods to proxy server: "
+               "send failed: %s",
+               strerror(errno));
+
+      socks_blacklist(route, emsg);
+      return -1;
+   }
+
+   if ((rc = socks_recvfromn(s,
+                             response,
+                             sizeof(response),
+                             sizeof(response),
+                             0,
+                             NULL,
+                             NULL,
+                             NULL,
+                             NULL)) != sizeof(response)) {
+      snprintf(emsg, emsglen,
+               "could not read proxy server's response concerning method to "
+               "use, read %ld/%lu: %s",
+               (long)rc,
+               (unsigned long)sizeof(response),
+               rc == 0 ? "server closed connection" : strerror(errno));
+
+      socks_blacklist(route, emsg);
+      return -1;
+   }
+
+   /*
+    * sanity check server's reply.
+    */
+
+   SASSERTX(AUTH_VERSION <= rc);
+   if (request[AUTH_VERSION] != response[AUTH_VERSION]) {
+      snprintf(emsg, emsglen,
+               "got reply version %d from proxy server, but expected version "
+               "%d.  Remote proxy server problem?",
+               response[AUTH_VERSION], request[AUTH_VERSION]);
+
+      socks_blacklist(route, emsg);
+      return -1;
+   }
+   packet->version = request[AUTH_VERSION];
+
+   SASSERTX(AUTH_SELECTEDMETHOD <= rc);
+   if (!methodisset(response[AUTH_SELECTEDMETHOD],
+                    intmethodv,
+                    request[AUTH_NMETHODS])) {
+      if (response[AUTH_SELECTEDMETHOD] == AUTHMETHOD_NOACCEPT)
+         snprintf(emsg, emsglen,
+                  "proxy server said we did not offer any acceptable "
+                  "authentication methods");
+      else {
+         snprintf(emsg, emsglen,
+                  "proxy server selected method 0x%x (%s), but that is not "
+                  "among the methods we offered it",
+                  response[AUTH_SELECTEDMETHOD],
+                  method2string(response[AUTH_SELECTEDMETHOD]));
+
+         swarnx("%s: %s", function, emsg);
+      }
+
+      socks_blacklist(route, emsg);
+      return -1;
+   }
+
+   slog(LOG_NEGOTIATE, "%s: proxy server selected method %s",
+        function, method2string(response[AUTH_SELECTEDMETHOD]));
+
+   switch (response[AUTH_SELECTEDMETHOD]) {
+      case AUTHMETHOD_NONE:
+         rc = 0;
+         break;
+
+#if HAVE_GSSAPI
+      case AUTHMETHOD_GSSAPI:
+         if (clientmethod_gssapi(s,
+                                 packet->req.protocol,
+                                 &packet->gw,
+                                 packet->req.version,
+                                 packet->req.auth,
+                                 lemsg,
+                                 sizeof(lemsg)) == 0)
+            rc = 0;
+         else
+            rc = -1;
+         break;
+#endif /* HAVE_GSSAPI */
+
+      case AUTHMETHOD_UNAME:
+         if (clientmethod_uname(s,
+                                &packet->gw.addr,
+                                packet->req.version,
+                                name,
+                                password,
+                                lemsg,
+                                sizeof(lemsg)) == 0)
+            rc = 0;
+         else
+            rc = -1;
+         break;
+
+      case AUTHMETHOD_NOACCEPT:
+         snprintf(lemsg, sizeof(lemsg),
+                  "proxy server did not accept any of the authentication "
+                  "methods we offered it");
+
+         socks_blacklist(route, emsg);
+         rc = -1;
+         break;
+
+      default:
+         SERRX(packet->req.auth->method);
+   }
+
+   packet->req.auth->method = response[AUTH_SELECTEDMETHOD];
+
+   if (rc == 0) {
+      slog(LOG_NEGOTIATE, "%s: established v%d connection using method %d",
+           function, packet->version, packet->req.auth->method);
+
+      errno = 0; /* all is ok. */
+   }
+   else {
+      snprintf(emsg, emsglen,
+               "failed to establish v%d connection using method %d: %s",
+               packet->version, packet->req.auth->method, lemsg);
+
+      slog(LOG_DEBUG, "%s: %s", function, emsg);
+   }
+
+   return (int)rc;
 }

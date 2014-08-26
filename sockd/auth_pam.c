@@ -1,5 +1,6 @@
 /*
- * Copyright (c) 2001, 2002, 2003, 2004
+ * Copyright (c) 2001, 2002, 2004, 2005, 2006, 2008, 2009, 2010, 2011, 2012,
+ *               2013
  *      Inferno Nettverk A/S, Norway.  All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
@@ -42,7 +43,7 @@
  */
 
 /*
- * Based on code originaly from
+ * Based on code originally from
  * Patrick Bihan-Faou, MindStep Corporation, patrick@mindstep.com.
  */
 
@@ -51,156 +52,235 @@
 #if HAVE_PAM
 
 static const char rcsid[] =
-"$Id: auth_pam.c,v 1.23 2005/11/23 13:23:26 michaels Exp $";
-
-__BEGIN_DECLS
+"$Id: auth_pam.c,v 1.100 2013/10/27 15:24:42 karls Exp $";
 
 static int
-_pam_conversation(int num_msg, const struct pam_message **msgs,
-struct pam_response **rsps, void *priv_data);
+pam_conversation(int msgc, const struct pam_message **msgv,
+                 struct pam_response **rspv, void *authdata);
+/*
+ * Called by the pam system to fetch username and password info.
+ */
 
-typedef struct
-{
-	const char *user;
-	const char *password;
-} _pam_data_t;
-
-#ifdef HAVE_SOLARIS_PAM_BUG
-static _pam_data_t * _pam_priv_data;
-#endif /* HAVE_SOLARIS_PAM_BUG */
-
-
-__END_DECLS
 
 int
 pam_passwordcheck(s, src, dst, auth, emsg, emsgsize)
-	int s;
-	const struct sockaddr *src, *dst;
-	const struct authmethod_pam_t *auth;
-	char *emsg;
-	size_t emsgsize;
+   int s;
+   const struct sockaddr_storage *src, *dst;
+   const authmethod_pam_t *auth;
+   char *emsg;
+   size_t emsgsize;
 {
-	const char *function = "pam_passwordcheck()";
-	int rc;
-	uid_t	euid;
-	pam_handle_t *pamh;
-	_pam_data_t uinfo;
-	struct pam_conv _pam_conv = { _pam_conversation, NULL };
+   const char *function = "pam_passwordcheck()";
+   authmethod_pam_t authdata = *auth;
+   struct pam_conv pamconv;
+   pam_handle_t *pamh;
+   size_t i;
+   char srcstr[MAXSOCKADDRSTRING], visbuf[MAXNAMELEN * 4];
+   int rc;
 
-#ifdef HAVE_SOLARIS_PAM_BUG
-	_pam_priv_data = NULL;
-#endif /* HAVE_SOLARIS_PAM_BUG */
+   /*
+    * unfortunately we can not set password here, that needs to be set
+    * "from a module", i.e. in the conversion function, at least with
+    * one Linux pam implementation.
+    */
+   struct {
+      int         item;
+      const char  *itemname;
+      const void  *value;
+      int         printable;
 
-	slog(LOG_DEBUG, function);
+   } pamval[] = {
+      { (int)PAM_CONV,  "PAM_CONV",  &pamconv,                              0 },
+      { (int)PAM_RHOST, "PAM_RHOST",
+                  src == NULL ?
+                     "" : sockaddr2string2(src, 0, srcstr, sizeof(srcstr)), 1 },
+      { (int)PAM_USER,  "PAM_USER",  (*auth->name == NUL) ?
+                              DEFAULT_PAM_USER : (const char *)auth->name,  1 },
+      { (int)PAM_RUSER, "PAM_RUSER", DEFAULT_PAM_RUSER,                     1 },
+   };
 
-	socks_seteuid(&euid, sockscf.uid.privileged);
+   slog(LOG_DEBUG, "%s: src %s, user \"%s\", servicename \"%s\", emsgsize %ld",
+        function,
+        src == NULL ? "N/A" : sockaddr2string(src, NULL, 0),
+        str2vis((const char *)auth->name,
+                strlen((const char *)auth->name),
+                visbuf,
+                sizeof(visbuf)),
+        auth->servicename,
+        (long)emsgsize);
 
-	/*
-	 * used to cache this and only call pam_start() once, but that created
-	 * obscure problems on some linux implementations.  Maybe another day.
-	 */
-	if ((rc = pam_start(*auth->servicename == NUL ?
-	DEFAULT_PAMSERVICENAME : auth->servicename, (const char *)auth->name, 
-	&_pam_conv, &pamh)) != PAM_SUCCESS) {
-		snprintf(emsg, emsgsize, "pam_start(): %s", pam_strerror(pamh, rc));
-		pam_end(pamh, rc);
-		socks_reseteuid(sockscf.uid.privileged, euid);
-		return -1;
-	}
+   if (src == NULL) {
+      snprintf(emsg, emsgsize, "%s: NULL src address: not supported", function);
+      return  -1;
+   }
+   /*
+    * Note: we can not save the state of pam after pam_start(3), as
+    * e.g. Solaris 5.11 pam does not allow setting PAM_SERVICE
+    * except during pam_start(3), while we may need to change it
+    * depending on the client/rule.
+    * Some Linux pam-implementations on the other hand can enter
+    * some sort of busy-loop if we don't call pam_end(3) ever so
+    * often.
+    *
+    * Therefor, disregard all possible optimization stuff for now and
+    * call pam_start(3) and pam_end(3) every time.
+    */
 
-	uinfo.user		= (const char *)(auth->name);
-	uinfo.password = (const char *)(auth->password);
-	_pam_conv.appdata_ptr = (char *)&uinfo;
-#ifdef HAVE_SOLARIS_PAM_BUG
-	_pam_priv_data = &uinfo;
-#endif /* HAVE_SOLARIS_PAM_BUG */
+   pamconv.conv        = pam_conversation;
+   pamconv.appdata_ptr = &authdata;
 
-	if ((rc = pam_set_item(pamh, PAM_CONV, &_pam_conv)) != PAM_SUCCESS) {
-		socks_reseteuid(sockscf.uid.privileged, euid);
-		snprintf(emsg, emsgsize, "pam_set_item(PAM_CONV): %s",
-		pam_strerror(pamh, rc));
-		return -1;
-	}
+   sockd_priv(SOCKD_PRIV_PAM, PRIV_ON);
+   rc = pam_start(auth->servicename, NULL, &pamconv, &pamh);
+   sockd_priv(SOCKD_PRIV_PAM, PRIV_OFF);
 
-	if ((rc = pam_set_item(pamh, PAM_RHOST, inet_ntoa(TOCIN(src)->sin_addr)))
-	!= PAM_SUCCESS) {
-		socks_reseteuid(sockscf.uid.privileged, euid);
-		snprintf(emsg, emsgsize, "pam_set_item(PAM_RHOST): %s",
-		pam_strerror(pamh, rc));
-		return -1;
-	}
+   if (rc != (int)PAM_SUCCESS) {
+      snprintf(emsg, emsgsize, "pam_start() failed: %s",
+               pam_strerror(pamh, rc));
 
-	if ((rc = pam_authenticate(pamh, 0)) != PAM_SUCCESS) {
-		socks_reseteuid(sockscf.uid.privileged, euid);
-		snprintf(emsg, emsgsize, "pam_authenticate(): %s",
-		pam_strerror(pamh, rc));
-		return -1;
-	}
+      return -1;
+   }
 
-	if ((rc = pam_acct_mgmt(pamh, 0)) != PAM_SUCCESS) {
-		socks_reseteuid(sockscf.uid.privileged, euid);
-		snprintf(emsg, emsgsize, "pam_acct_mgmt(): %s", pam_strerror(pamh, rc));
-		return -1;
-	}
+   for (i = 0; i < ELEMENTS(pamval); ++i) {
+      if (pamval[i].printable) {
+         str2vis((const char *)pamval[i].value,
+                 strlen((const char *)pamval[i].value),
+                 visbuf,
+                 sizeof(visbuf));
 
-	if ((rc = pam_end(pamh, rc)) != PAM_SUCCESS) {
-		socks_reseteuid(sockscf.uid.privileged, euid);
-		snprintf(emsg, emsgsize, "pam_end(): %s", pam_strerror(pamh, rc));
-		return -1; 
-	}
+         slog(LOG_DEBUG, "%s: setting item \"%s\" to value \"%s\"",
+              function, pamval[i].itemname, visbuf);
+      }
+      else
+         slog(LOG_DEBUG, "%s: setting item %s", function, pamval[i].itemname);
 
-	socks_reseteuid(sockscf.uid.privileged, euid);
-	return 0;
+      if ((rc = pam_set_item(pamh, pamval[i].item, pamval[i].value))
+      != (int)PAM_SUCCESS) {
+         snprintf(emsg, emsgsize, "pam_set_item(%s) to \"%s\" failed: %s",
+                  pamval[i].itemname, visbuf, pam_strerror(pamh, rc));
+
+         pam_end(pamh, rc);
+         return -1;
+      }
+   }
+
+   sockd_priv(SOCKD_PRIV_PAM, PRIV_ON);
+
+   if ((rc = pam_authenticate(pamh, 0)) != (int)PAM_SUCCESS) {
+      sockd_priv(SOCKD_PRIV_PAM, PRIV_OFF);
+
+      slog(LOG_DEBUG, "%s: pam_authenticate() failed: %s",
+           function, pam_strerror(pamh, rc));
+
+      snprintf(emsg, emsgsize, "pam_authenticate() for user \"%s\" failed: %s",
+               *auth->name == NUL ?
+                  "<no user specified>" : str2vis((const char *)auth->name,
+                                               strlen((const char *)auth->name),
+                                                  visbuf,
+                                                  sizeof(visbuf)),
+               pam_strerror(pamh, rc));
+
+      pam_end(pamh, rc);
+      return -1;
+   }
+
+   /* LINTED passing const, expecting non-const (PAM_SILENT) */
+   rc = pam_acct_mgmt(pamh, PAM_SILENT);
+
+   sockd_priv(SOCKD_PRIV_PAM, PRIV_OFF);
+
+   if (rc != PAM_SUCCESS) {
+      slog(LOG_DEBUG, "%s: pam_acct_mgmt() failed: %s",
+           function, pam_strerror(pamh, rc));
+
+      snprintf(emsg, emsgsize, "pam_acct_mgmt(): %s", pam_strerror(pamh, rc));
+
+      pam_end(pamh, rc);
+      return -1;
+   }
+
+   if ((rc = pam_end(pamh, rc)) != (int)PAM_SUCCESS)
+      swarnx("%s: strange ... pam_end() failed: %s",
+             function, pam_strerror(pamh, rc));
+
+   slog(LOG_DEBUG, "%s: pam authentication succeeded", function);
+   return 0;
 }
 
 static int
-_pam_conversation(num_msg, msgs, rsps, priv_data)
-	int num_msg;
-	const struct pam_message **msgs;
-	struct pam_response **rsps;
-	void * priv_data;
+pam_conversation(msgc, msgv, rspv, authdata)
+   int msgc;
+   const struct pam_message **msgv;
+   struct pam_response **rspv;
+   void *authdata;
 {
-	_pam_data_t *uinfo = (_pam_data_t *)priv_data;
-	struct pam_response *rsp;
-	int i;
+   const authmethod_pam_t *auth = authdata;
+   const char *function = "pam_conversation()";
+   int i, rc;
 
-#ifdef HAVE_SOLARIS_PAM_BUG
-	uinfo = _pam_priv_data;
-#endif /* HAVE_SOLARIS_PAM_BUG */
+   if (rspv == NULL || msgv == NULL || auth == NULL || msgc < 1) {
+      swarnx("%s: called with invalid/unexpected input", function);
+      return (int)PAM_CONV_ERR;
+   }
 
-	if (!rsps || !msgs || num_msg <= 0)
-		return PAM_CONV_ERR;
+   if (((*rspv) = malloc(msgc * sizeof(struct pam_response))) == NULL) {
+      swarn("%s: malloc(%d * %lu)",
+            function, msgc, (unsigned long)sizeof(struct pam_response));
 
-	*rsps = NULL;
+      return (int)PAM_CONV_ERR;
+   }
 
-	if (!uinfo)
-		return PAM_CONV_ERR;
+   /* initialize all to NULL so we can easily free on error. */
+   for (i = 0; i < msgc; ++i) {
+      (*rspv)[i].resp_retcode = 0; /* according to sun not used, should be 0. */
+      (*rspv)[i].resp         = NULL;
+   }
 
-	if ((rsp = malloc(num_msg * sizeof(struct pam_response))) == NULL)
-		return PAM_CONV_ERR;
-	bzero(rsp, num_msg * sizeof(struct pam_response));
+   rc = (int)PAM_SUCCESS;
+   for (i = 0; i < msgc; ++i) {
+      slog(LOG_DEBUG, "%s: msg_style = %d", function, msgv[i]->msg_style);
 
-	for (i = 0; i < num_msg; i++) {
-		rsp[i].resp_retcode = 0;
-		rsp[i].resp = NULL;
+      switch(msgv[i]->msg_style) {
+         case PAM_PROMPT_ECHO_OFF:
+            if (((*rspv)[i].resp = strdup((const char *)auth->password))
+            == NULL) {
+               swarn("%s: strdup() of password, length %lu, failed",
+                     function,
+                     (unsigned long)strlen((const char *)auth->password));
 
-		switch(msgs[i]->msg_style) {
-			case PAM_PROMPT_ECHO_ON:
-				rsp[i].resp = strdup(uinfo->user);
-				break;
+               rc = (int)PAM_CONV_ERR;
+            }
+            break;
 
-			case PAM_PROMPT_ECHO_OFF:
-				rsp[i].resp = strdup(uinfo->password);
-				break;
+         case PAM_ERROR_MSG:
+            slog(LOG_INFO, "%s: got a pam error msg: %s",
+                 function, msgv[i]->msg);
+            break;
 
-			default:
-				free(rsp);
-				return PAM_CONV_ERR;
-		}
-	}
+         case PAM_TEXT_INFO:
+            /*
+             * not expecting this, and where it has been seen (some versions
+             * of FreeBSD), the string has been empty.
+             * Seen it on Linux also.  Don't know what it's for.
+             */
+            slog(LOG_DEBUG, "%s: got unexpected PAM_TEXT_INFO: \"%s\"",
+                 function, msgv[i]->msg);
+            break;
 
-	*rsps = rsp;
-	return PAM_SUCCESS;
+         default:
+            swarnx("%s: unknown msg_style %d, ignored ...",
+                   function, msgv[i]->msg_style);
+            break;
+      }
+   }
+
+   if (rc != (int)PAM_SUCCESS) { /* failed; free the memory ourselves */
+      for (i = 0; i < msgc; ++i)
+         free((*rspv)[i].resp);
+
+      free(*rspv);
+   }
+
+   return rc;
 }
 
 #endif /* HAVE_PAM */

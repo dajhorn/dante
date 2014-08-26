@@ -1,417 +1,643 @@
-/* $Id: getifaddrs.c,v 1.2 2001/12/12 12:31:57 karls Exp $ */
+/* $Id: getifaddrs.c,v 1.38 2013/10/27 15:24:42 karls Exp $ */
 
 #ifdef HAVE_CONFIG_H
 #include "autoconf.h"
-#endif  /* HAVE_CONFIG_H */
+#endif /* HAVE_CONFIG_H */
 
-#include "common.h"
-
-#if !HAVE_GETIFADDRS
-/*	$OpenBSD: getifaddrs.c,v 1.3 2000/11/24 08:26:47 itojun Exp $	*/
+#include "osdep.h"
 
 /*
- * Copyright (c) 1995, 1999
- *	Berkeley Software Design, Inc.  All rights reserved.
+ * Copyright (c) 2012, 2013
+ *      Inferno Nettverk A/S, Norway.  All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
  * modification, are permitted provided that the following conditions
  * are met:
- * 1. Redistributions of source code must retain the above copyright
- *    notice, this list of conditions and the following disclaimer.
+ * 1. The above copyright notice, this list of conditions and the following
+ *    disclaimer must appear in all copies of the software, derivative works
+ *    or modified versions, and any portions thereof, aswell as in all
+ *    supporting documentation.
+ * 2. All advertising materials mentioning features or use of this software
+ *    must display the following acknowledgement:
+ *      This product includes software developed by
+ *      Inferno Nettverk A/S, Norway.
+ * 3. The name of the author may not be used to endorse or promote products
+ *    derived from this software without specific prior written permission.
  *
- * THIS SOFTWARE IS PROVIDED BY Berkeley Software Design, Inc. ``AS IS'' AND
- * ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE
- * IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE
- * ARE DISCLAIMED.  IN NO EVENT SHALL Berkeley Software Design, Inc. BE LIABLE
- * FOR ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR CONSEQUENTIAL
- * DAMAGES (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS
- * OR SERVICES; LOSS OF USE, DATA, OR PROFITS; OR BUSINESS INTERRUPTION)
- * HOWEVER CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT
- * LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY
- * OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF
- * SUCH DAMAGE.
+ * THIS SOFTWARE IS PROVIDED BY THE AUTHOR ``AS IS'' AND ANY EXPRESS OR
+ * IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE IMPLIED WARRANTIES
+ * OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE ARE DISCLAIMED.
+ * IN NO EVENT SHALL THE AUTHOR BE LIABLE FOR ANY DIRECT, INDIRECT,
+ * INCIDENTAL, SPECIAL, EXEMPLARY, OR CONSEQUENTIAL DAMAGES (INCLUDING, BUT
+ * NOT LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR SERVICES; LOSS OF USE,
+ * DATA, OR PROFITS; OR BUSINESS INTERRUPTION) HOWEVER CAUSED AND ON ANY
+ * THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT
+ * (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF
+ * THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
  *
- *	BSDI getifaddrs.c,v 2.12 2000/02/23 14:51:59 dab Exp
+ * Inferno Nettverk A/S requests users of this software to return to
+ *
+ *  Software Distribution Coordinator  or  sdc@inet.no
+ *  Inferno Nettverk A/S
+ *  Oslo Research Park
+ *  Gaustadalléen 21
+ *  NO-0349 Oslo
+ *  Norway
+ *
+ * any improvements or extensions that they make and grant Inferno Nettverk A/S
+ * the rights to redistribute these changes.
+ *
  */
-/*
- * NOTE: SIOCGIFCONF case is not LP64 friendly.  it also does not perform
- * try-and-error for region size.
- */
-#if 0
-#include <sys/types.h>
-#include <sys/ioctl.h>
-#include <sys/socket.h>
-#include <net/if.h>
-#endif
-#ifdef	NET_RT_IFLIST
-#include <sys/param.h>
-#include <net/route.h>
-#include <sys/sysctl.h>
-#include <net/if_dl.h>
-#endif
 
-#if 0
-#include <errno.h>
-#include <ifaddrs.h>
-#include <stdlib.h>
-#include <string.h>
-#endif
-
-
-/*XXX IPv6*/
-#if !HAVE_SOCKADDR_SA_LEN && !defined(SA_LEN)
-#define	SA_LEN(sa)	sizeof(struct sockaddr)
-#endif
-
-#if !defined(SA_LEN)
-#define	SA_LEN(sa)	(sa)->sa_len
-#endif
-
-#if HAVE_SOCKADDR_SA_LEN
-#define	SALIGN	(sizeof(long) - 1)
-#define	SA_RLEN(sa)	((sa)->sa_len ? (((sa)->sa_len + SALIGN) & ~SALIGN) : (SALIGN + 1))
+#if PRERELEASE
+#define IFCONF_STARTENT 4
 #else
-#define SA_RLEN(sa) (SA_LEN(sa)) /*XXX?*/
-#endif /* HAVE_SOCKADDR_SA_LEN */
+#define IFCONF_STARTENT 10
+#endif /* PRERELEASE */
+#define IFCONF_MAXENT 1000
 
-#ifndef	ALIGNBYTES
+struct ifawrap {
+   struct ifaddrs *ifaddrs;
+   struct ifaddrs *prev;
+};
+
+static struct sockaddr *
+getifval(int s, int flag, struct ifreq *ifreq, struct sockaddr *addr,
+         uint8_t addrlen);
 /*
- * On systems with a routing socket, ALIGNBYTES should match the value
- * that the kernel uses when building the messages.
+ * lookup and verify address via specified flag using ioctl().
  */
-#define	ALIGNBYTES	XXX
-#endif
-#ifndef	ALIGN
-#define	ALIGN(p)	(((u_long)(p) + ALIGNBYTES) &~ ALIGNBYTES)
-#endif
-
-#ifdef _BSDI_VERSION
-#if	_BSDI_VERSION >= 199701
-#define	HAVE_IFM_DATA
-#endif
-
-#if	_BSDI_VERSION >= 199802
-/* ifam_data is very specific to recent versions of bsdi */
-#define	HAVE_IFAM_DATA
-#endif
-#endif /* _BSDI_VERSION */
-
-#if 0
-#if defined(__NetBSD__) || defined(__OpenBSD__) || defined(__FreeBSD__)
-#define	HAVE_IFM_DATA
-#endif
-#endif
-
-/*XXX*/
-#undef NET_RT_IFLIST
-#undef HAVE_IFM_DATA
 
 int
-getifaddrs(struct ifaddrs **pif)
+lifconf_add(struct ifawrap *ifawrap);
+/*
+ * add IPv6 addresses via SunOS lifconf interface.
+ */
+
+
+static int
+ifaddrs_add(struct ifawrap *ifawrap,
+            char *name, unsigned int flags,
+            struct sockaddr *addr, struct sockaddr *netmask,
+            struct sockaddr *dstaddr, struct sockaddr *data, size_t addrlen);
+/*
+ * add ifaddrs interface values to ifawrap structure.
+ */
+
+
+int
+getifaddrs(struct ifaddrs **ifap)
 {
-	int icnt = 1;
-	int dcnt = 0;
-	int ncnt = 0;
-#ifdef	NET_RT_IFLIST
-	int mib[6];
-	size_t needed;
-	char *buf;
-	char *next;
-	struct ifaddrs *cif = 0;
-	char *p, *p0;
-	struct rt_msghdr *rtm;
-	struct if_msghdr *ifm;
-	struct ifa_msghdr *ifam;
-	struct sockaddr_dl *dl;
-	struct sockaddr *sa;
-	u_short index = 0;
-	size_t len, alen;
-#else	/* NET_RT_IFLIST */
-	char buf[1024];
-	int sock;
-	struct ifconf ifc;
-	struct ifreq *ifr;
-	struct ifreq *lifr;
-#endif	/* NET_RT_IFLIST */
-	struct ifaddrs *ifa, *ift;
-	int i;
-	char *data;
-	char *names;
+   struct sockaddr_storage i_addr, i_netmask, i_broaddst;
+   struct sockaddr *p_addr, *p_netmask, *p_broaddst;
+   struct ifawrap ifawrap;
+   struct ifconf ifconf;
+   struct ifreq *ifreq;
+   struct ifreq ifreq2;
+   size_t addrlen;
+   unsigned int flags;
+   int addrskip;
+   int prevlen;
+   int badname;
+   char *nbuf;
+   char *buf;
+   char *p;
+   int cnt;
+   int len;
+   int i;
+   int s;
 
-#ifdef	NET_RT_IFLIST
-	mib[0] = CTL_NET;
-	mib[1] = PF_ROUTE;
-	mib[2] = 0;             /* protocol */
-	mib[3] = 0;             /* wildcard address family */
-	mib[4] = NET_RT_IFLIST;
-	mib[5] = 0;             /* no flags */
-	if (sysctl(mib, 6, NULL, &needed, NULL, 0) < 0)
-		return (-1);
-	if ((buf = malloc(needed)) == NULL)
-		return (-1);
-	if (sysctl(mib, 6, buf, &needed, NULL, 0) < 0) {
-		free(buf);
-		return (-1);
-	}
+   if ((s = socket(AF_INET, SOCK_DGRAM, 0)) == -1)
+      return -1;
 
-	for (next = buf; next < buf + needed; next += rtm->rtm_msglen) {
-		rtm = (struct rt_msghdr *)next;
-		if (rtm->rtm_version != RTM_VERSION)
-			continue;
-		switch (rtm->rtm_type) {
-		case RTM_IFINFO:
-			ifm = (struct if_msghdr *)rtm;
-			if (ifm->ifm_addrs & RTA_IFP) {
-				index = ifm->ifm_index;
-				++icnt;
-				dl = (struct sockaddr_dl *)(ifm + 1);
-				dcnt += SA_RLEN((struct sockaddr *)dl) +
-					ALIGNBYTES;
-#ifdef	HAVE_IFM_DATA
-				dcnt += sizeof(ifm->ifm_data);
-#endif	/* HAVE_IFM_DATA */
-				ncnt += dl->sdl_nlen + 1;
-			} else
-				index = 0;
-			break;
+   bzero(&ifconf, sizeof(ifconf));
+   /* attempt to get required size (ifc_len set to zero) */
+   if (ioctl(s, SIOCGIFCONF, &ifconf) != -1 && ifconf.ifc_len != 0) {
+      len = ifconf.ifc_len;
+      if ((buf = malloc(len)) == NULL) {
+         close(s);
+         return -1;
+      }
+      ifconf.ifc_len = len;
+      ifconf.ifc_buf = buf;
+      if (ioctl(s, SIOCGIFCONF, &ifconf) == -1) {
+         free(buf);
+         close(s);
+         return -1;
+      }
+   } else {
+      buf = NULL;
+      prevlen = 0;
+      cnt = IFCONF_STARTENT;
+      /* try with increasing size until sure all entries obtained */
+      for (;;) {
+         len = sizeof(struct ifreq) * cnt;
+         if ((nbuf = realloc(buf, len)) == NULL) {
+            free(buf);
+            close(s);
+            return -1;
+         }
+         buf = nbuf;
 
-		case RTM_NEWADDR:
-			ifam = (struct ifa_msghdr *)rtm;
-			if (index && ifam->ifam_index != index)
-				abort();	/* this cannot happen */
+         ifconf.ifc_len = len;
+         ifconf.ifc_buf = buf;
 
-#define	RTA_MASKS	(RTA_NETMASK | RTA_IFA | RTA_BRD)
-			if (index == 0 || (ifam->ifam_addrs & RTA_MASKS) == 0)
-				break;
-			p = (char *)(ifam + 1);
-			++icnt;
-#ifdef	HAVE_IFAM_DATA
-			dcnt += sizeof(ifam->ifam_data) + ALIGNBYTES;
-#endif	/* HAVE_IFAM_DATA */
-			/* Scan to look for length of address */
-			alen = 0;
-			for (p0 = p, i = 0; i < RTAX_MAX; i++) {
-				if ((RTA_MASKS & ifam->ifam_addrs & (1 << i))
-				    == 0)
-					continue;
-				sa = (struct sockaddr *)p;
-				len = SA_RLEN(sa);
-				if (i == RTAX_IFA) {
-					alen = len;
-					break;
-				}
-				p += len;
-			}
-			for (p = p0, i = 0; i < RTAX_MAX; i++) {
-				if ((RTA_MASKS & ifam->ifam_addrs & (1 << i))
-				    == 0)
-					continue;
-				sa = (struct sockaddr *)p;
-				len = SA_RLEN(sa);
-				if (i == RTAX_NETMASK && SA_LEN(sa) == 0)
-					dcnt += alen;
-				else
-					dcnt += len;
-				p += len;
-			}
-			break;
-		}
-	}
-#else	/* NET_RT_IFLIST */
-	ifc.ifc_buf = buf;
-	ifc.ifc_len = sizeof(buf);
+         if (ioctl(s, SIOCGIFCONF, &ifconf) == -1 && errno != EINVAL) {
+            free(buf);
+            close(s);
+            return -1;
+         }
 
-	if ((sock = socket(AF_INET, SOCK_STREAM, 0)) == -1)
-		return (-1);
-	i = ioctl(sock, SIOCGIFCONF, (char *)&ifc);
-	close(sock);
-	if (i == -1)
-		return (-1);
+         /* end upon having two ioctl() calls of same size */
+         if (ifconf.ifc_len > 0 && ifconf.ifc_len == prevlen)
+            break;
 
-	ifr = ifc.ifc_req;
-	lifr = (struct ifreq *)&ifc.ifc_buf[ifc.ifc_len];
+         prevlen = ifconf.ifc_len;
+         cnt *= 2;
 
-	while (ifr < lifr) {
-		struct sockaddr *sa;
+         if (cnt >= IFCONF_MAXENT) {
+            /* too many entries */
+            free(buf);
+            close(s);
+            return -1;
+         }
+      }
+   }
 
-		sa = &ifr->ifr_addr;
-		++icnt;
-		dcnt += SA_RLEN(sa);
-		ncnt += sizeof(ifr->ifr_name) + 1;
+   ifawrap.ifaddrs = NULL;
+   p = ifconf.ifc_buf;
+   while (p < ifconf.ifc_buf + ifconf.ifc_len) {
+      ifreq = (struct ifreq *)p;
 
-		ifr = (struct ifreq *)(((char *)sa) + SA_LEN(sa));
-	}
-#endif	/* NET_RT_IFLIST */
+      p_addr = p_netmask = p_broaddst = NULL;
+      bzero(&i_addr, sizeof(i_addr));
+      bzero(&i_netmask, sizeof(i_netmask));
+      bzero(&i_broaddst, sizeof(i_broaddst));
 
-	if (icnt + dcnt + ncnt == 1) {
-		*pif = NULL;
-		free(buf);
-		return (0);
-	}
-	data = malloc(sizeof(struct ifaddrs) * icnt + dcnt + ncnt);
-	if (data == NULL) {
-		free(buf);
-		return(-1);
-	}
+      /* invalid name likely indication of a problem */
+      badname = 0;
+      if (ifreq->ifr_name[0] == '\0')
+         badname = 1;
+      else
+         for (i = 0; (size_t)i < sizeof(ifreq->ifr_name); i++) {
+            if (ifreq->ifr_name[i] == '\0')
+               break;
+            if (!isgraph(ifreq->ifr_name[i])) {
+               badname = 1;
+               break;
+            }
+         }
+      if (badname) {
+         free(buf);
+         close(s);
+         errno = EFAULT;
+         return -1;
+      }
 
-	ifa = (struct ifaddrs *)data;
-	data += sizeof(struct ifaddrs) * icnt;
-	names = data + dcnt;
+#if HAVE_SOCKADDR_SA_LEN
 
-	memset(ifa, 0, sizeof(struct ifaddrs) * icnt);
-	ift = ifa;
+      addrlen = MAX(sizeof(struct sockaddr), ifreq->ifr_addr.sa_len);
 
-#ifdef	NET_RT_IFLIST
-	index = 0;
-	for (next = buf; next < buf + needed; next += rtm->rtm_msglen) {
-		rtm = (struct rt_msghdr *)next;
-		if (rtm->rtm_version != RTM_VERSION)
-			continue;
-		switch (rtm->rtm_type) {
-		case RTM_IFINFO:
-			ifm = (struct if_msghdr *)rtm;
-			if (ifm->ifm_addrs & RTA_IFP) {
-				index = ifm->ifm_index;
-				dl = (struct sockaddr_dl *)(ifm + 1);
+#else /*  !HAVE_SOCKADDR_SA_LEN */
 
-				cif = ift;
-				ift->ifa_name = names;
-				ift->ifa_flags = (int)ifm->ifm_flags;
-				memcpy(names, dl->sdl_data, dl->sdl_nlen);
-				names[dl->sdl_nlen] = 0;
-				names += dl->sdl_nlen + 1;
+      switch (ifreq->ifr_addr.sa_family) {
+         case AF_INET6:
+            addrlen = sizeof(struct sockaddr_in6);
+            break;
 
-				ift->ifa_addr = (struct sockaddr *)data;
-				memcpy(data, dl, SA_LEN((struct sockaddr *)dl));
-				data += SA_RLEN((struct sockaddr *)dl);
+#ifdef AF_LINK
+         case AF_LINK:
+            addrlen = sizeof(struct sockaddr_dl);
+            break;
+#endif /* AF_LINK */
 
-#ifdef	HAVE_IFM_DATA
-				/* ifm_data needs to be aligned */
-				ift->ifa_data = data = (void *)ALIGN(data);
-				memcpy(data, &ifm->ifm_data, sizeof(ifm->ifm_data));
-				data += sizeof(ifm->ifm_data);
-#else	/* HAVE_IFM_DATA */
-				ift->ifa_data = NULL;
-#endif	/* HAVE_IFM_DATA */
+         case AF_INET: /*FALLTHROUGH*/
+         default:
+            addrlen = sizeof(struct sockaddr);
+            break;
+      }
+#endif /* !HAVE_SOCKADDR_SA_LEN */
+      addrskip = ROUNDUP(addrlen, sizeof(uint32_t));
 
-				ift = (ift->ifa_next = ift + 1);
-			} else
-				index = 0;
-			break;
+      p += MAX(sizeof(ifreq->ifr_name) + addrskip, sizeof(struct ifreq));
+      /* skip everything but inet/inet6/af_link */
+      switch (ifreq->ifr_addr.sa_family) {
+      case AF_INET:/*FALLTHROUGH*/
+      case AF_INET6:/*FALLTHROUGH*/
+#ifdef AF_LINK
+      case AF_LINK:
+#endif /* AF_LINK */
+         break;
+      default:
+         continue;
+      }
 
-		case RTM_NEWADDR:
-			ifam = (struct ifa_msghdr *)rtm;
-			if (index && ifam->ifam_index != index)
-				abort();	/* this cannot happen */
+      /* skip unless interface is up */
+      ifreq2 = *ifreq;
+      if (ioctl(s, SIOCGIFFLAGS, &ifreq2) == -1) {
+         free(buf);
+         close(s);
+         return -1;
+      }
+      flags = ifreq2.ifr_flags;
+      if ((flags & IFF_UP) == 0) {
+         continue;
+      }
 
-			if (index == 0 || (ifam->ifam_addrs & RTA_MASKS) == 0)
-				break;
-			ift->ifa_name = cif->ifa_name;
-			ift->ifa_flags = cif->ifa_flags;
-			ift->ifa_data = NULL;
-			p = (char *)(ifam + 1);
-			/* Scan to look for length of address */
-			alen = 0;
-			for (p0 = p, i = 0; i < RTAX_MAX; i++) {
-				if ((RTA_MASKS & ifam->ifam_addrs & (1 << i))
-				    == 0)
-					continue;
-				sa = (struct sockaddr *)p;
-				len = SA_RLEN(sa);
-				if (i == RTAX_IFA) {
-					alen = len;
-					break;
-				}
-				p += len;
-			}
-			for (p = p0, i = 0; i < RTAX_MAX; i++) {
-				if ((RTA_MASKS & ifam->ifam_addrs & (1 << i))
-				    == 0)
-					continue;
-				sa = (struct sockaddr *)p;
-				len = SA_RLEN(sa);
-				switch (i) {
-				case RTAX_IFA:
-					ift->ifa_addr = (struct sockaddr *)data;
-					memcpy(data, p, len);
-					data += len;
-					break;
+      bzero(&i_addr, sizeof(i_addr));
+      memcpy(&i_addr, &ifreq->ifr_addr,
+             MIN(sizeof(ifreq->ifr_addr), sizeof(i_addr)));
+      p_addr = (struct sockaddr *)&i_addr;
 
-				case RTAX_NETMASK:
-					ift->ifa_netmask =
-					    (struct sockaddr *)data;
-					if (SA_LEN(sa) == 0) {
-						memset(data, 0, alen);
-						data += alen;
-						break;
-					}
-					memcpy(data, p, len);
-					data += len;
-					break;
+#ifdef SIOCGIFNETMASK
+      p_netmask = getifval(s, SIOCGIFNETMASK, ifreq,
+                           (struct sockaddr *)&i_netmask, addrlen);
+#endif /* SIOCGIFNETMASK */
 
-				case RTAX_BRD:
-					ift->ifa_broadaddr =
-					    (struct sockaddr *)data;
-					memcpy(data, p, len);
-					data += len;
-					break;
-				}
-				p += len;
-			}
+#ifdef SIOCGIFBRDADDR
+      if (flags & IFF_BROADCAST)
+         p_broaddst = getifval(s, SIOCGIFBRDADDR, ifreq,
+                               (struct sockaddr *)&i_broaddst, addrlen);
+#endif /* SIOCGIFBRDADDR */
 
-#ifdef	HAVE_IFAM_DATA
-			/* ifam_data needs to be aligned */
-			ift->ifa_data = data = (void *)ALIGN(data);
-			memcpy(data, &ifam->ifam_data, sizeof(ifam->ifam_data));
-			data += sizeof(ifam->ifam_data);
-#endif	/* HAVE_IFAM_DATA */
+#ifdef SIOCGIFDSTADDR
+      if (p_broaddst == NULL && flags & IFF_POINTOPOINT)
+         p_broaddst = getifval(s, SIOCGIFDSTADDR, ifreq,
+                               (struct sockaddr *)&i_broaddst, addrlen);
+#endif /* SIOCGIFDSTADDR */
 
-			ift = (ift->ifa_next = ift + 1);
-			break;
-		}
-	}
+      /*XXX data */
+      if (ifaddrs_add(&ifawrap, ifreq->ifr_name, flags, p_addr, p_netmask,
+                      p_broaddst, NULL, addrlen) == -1) {
+         if (ifawrap.ifaddrs != NULL) {
+            freeifaddrs(ifawrap.ifaddrs);
+            free(buf);
+            close(s);
+            return -1;
+         }
+      }
+   }
 
-	free(buf);
-#else	/* NET_RT_IFLIST */
-	ifr = ifc.ifc_req;
-	lifr = (struct ifreq *)&ifc.ifc_buf[ifc.ifc_len];
+#ifdef SIOCGLIFCONF
+   lifconf_add(&ifawrap);
+#endif /* SIOCGLIFCONF */
 
-	while (ifr < lifr) {
-		struct sockaddr *sa;
-
-		ift->ifa_name = names;
-		names[sizeof(ifr->ifr_name)] = 0;
-		strncpy(names, ifr->ifr_name, sizeof(ifr->ifr_name));
-		while (*names++)
-			;
-
-		ift->ifa_addr = (struct sockaddr *)data;
-		sa = &ifr->ifr_addr;
-		memcpy(data, sa, SA_LEN(sa));
-		data += SA_RLEN(sa);
-
-		ifr = (struct ifreq *)(((char *)sa) + SA_LEN(sa));
-		ift = (ift->ifa_next = ift + 1);
-	}
-#endif	/* NET_RT_IFLIST */
-	if (--ift >= ifa) {
-		ift->ifa_next = NULL;
-		*pif = ifa;
-	} else {
-		*pif = NULL;
-		free(ifa);
-	}
-	return (0);
+   free(buf);
+   close(s);
+   *ifap = ifawrap.ifaddrs;
+   return 0;
 }
+
+static struct sockaddr *
+getifval(int s, int flag, struct ifreq *ifreq, struct sockaddr *addr,
+         uint8_t addrlen)
+{
+   char hbuf[NI_MAXHOST];
+   struct ifreq ifreq2;
+
+   ifreq2 = *ifreq;
+   if (ioctl(s, flag, &ifreq2) == -1)
+      return NULL;
+
+   /* family/len might not be correctly set, copy original value */
+   ifreq2.ifr_addr.sa_family = ifreq->ifr_addr.sa_family;
+#if HAVE_SOCKADDR_SA_LEN
+   ifreq2.ifr_addr.sa_len = addrlen;
+#endif /* HAVE_SOCKADDR_SA_LEN */
+
+   /* XXX verify address correctness for now */
+   if ((ifreq2.ifr_addr.sa_family == AF_INET
+   ||  ifreq2.ifr_addr.sa_family == AF_INET6)
+      && (getnameinfo((struct sockaddr *)&ifreq2.ifr_addr, addrlen,
+                          hbuf, sizeof(hbuf),
+                          NULL,
+                          0,
+                          NI_NUMERICHOST | NI_NUMERICSERV)) != 0) {
+      return NULL;
+   }
+
+   memcpy(addr, &ifreq2.ifr_addr, addrlen);
+   return addr;
+}
+
+static int
+ifaddrs_add(struct ifawrap *ifawrap, char *name, unsigned int flags,
+            struct sockaddr *addr, struct sockaddr *netmask,
+            struct sockaddr *dstaddr, struct sockaddr *data, size_t addrlen)
+{
+   size_t nameoff, addroff, maskoff, dstoff;
+#if 0
+   size_t dataoff;
+#endif
+   struct ifaddrs *new;
+   size_t addrskip;
+   size_t namelen;
+   size_t nsize;
+   char *p;
+
+   namelen = strlen(name) + 1;
+
+   addrskip = ROUNDUP(addrlen, sizeof(uint32_t));
+
+   nsize = 0;
+   nsize += ROUNDUP(sizeof(struct ifaddrs), sizeof(uint32_t));
+   nameoff = nsize;
+
+   nsize += ROUNDUP(namelen, sizeof(uint32_t));
+
+   nsize += ROUNDUP(sizeof(flags), sizeof(uint32_t));
+   addroff = nsize;
+
+   if (addr != NULL)
+      nsize += addrskip;
+   maskoff = nsize;
+
+   if (netmask != NULL)
+      nsize += addrskip;
+   dstoff = nsize;
+
+   if (dstaddr != NULL)
+      nsize += addrskip;
+#if 0
+   dataoff = nsize;
+#endif
+
+   if (data != NULL) /*XXX*/
+      nsize += addrskip; /*XXX*/
+
+   if ((new = malloc(nsize)) == NULL)
+      return -1; /* let caller free already allocated data */
+   if (ifawrap->ifaddrs == NULL)
+      ifawrap->ifaddrs = new;
+   else
+      ifawrap->prev->ifa_next = new;
+   ifawrap->prev = new;
+
+   new->ifa_next = NULL;
+
+   p = (char *)new + nameoff;
+   strncpy(p, name, namelen - 1);
+   p[namelen - 1] = '\0';
+   new->ifa_name = p;
+
+   new->ifa_flags = flags;
+
+   if (addr != NULL) {
+      p = (char *)new + addroff;
+      memcpy(p, addr, addrlen);
+      new->ifa_addr = (struct sockaddr *)p;
+   } else
+      new->ifa_addr = NULL;
+
+   if (netmask != NULL) {
+      p = (char *)new + maskoff;
+      memcpy(p, netmask, addrlen);
+      new->ifa_netmask = (struct sockaddr *)p;
+   } else
+      new->ifa_netmask = NULL;
+
+   if (dstaddr != NULL) {
+      p = (char *)new + dstoff;
+      memcpy(p, dstaddr, addrlen);
+      new->ifa_dstaddr = (struct sockaddr *)p;
+   } else
+      new->ifa_dstaddr = NULL;
+
+#if 0 /*XXX*/
+   if (data != NULL) {
+      p = (char *)new + dataoff;
+      memcpy(p, data, addrlen);
+      new->ifa_data = (struct sockaddr *)p;
+   } else
+#endif
+      new->ifa_data = NULL;
+
+   return 0;
+}
+
 void
-freeifaddrs(struct ifaddrs *ifp)
+freeifaddrs(struct ifaddrs *ifap)
 {
-	free(ifp);
+   struct ifaddrs *c, *n;
+
+   c = ifap;
+   while (c != NULL) {
+      n = c->ifa_next;
+      free(c);
+      c = n;
+   }
 }
-#else
-static void avoid_error __P((void));
-static void avoid_error()
+
+#ifdef SIOCGLIFCONF
+
+/* Solaris lif variant for ipv6 */
+
+/* XXX can likely be simplified/merged better with above code */
+
+static struct sockaddr *
+getifval2(int s, int flag, struct lifreq *lifreq, struct sockaddr *addr,
+         uint8_t addrlen);
+
+int
+lifconf_add(struct ifawrap *ifawrap)
 {
-	avoid_error();
+   struct sockaddr_storage i_addr, i_netmask, i_broaddst;
+   struct sockaddr *p_addr, *p_netmask, *p_broaddst;
+   struct lifnum lifnum;
+   struct lifconf lifconf;
+   struct lifreq *lifreq;
+   struct lifreq lifreq2;
+   unsigned int flags;
+   size_t addrlen;
+   int addrskip;
+   int badname;
+   char *buf;
+   char *p;
+   int i;
+   int s;
+
+   /* need AF_INET6 or attempt to obtain netmask will fail (Solaris 10) */
+   if ((s = socket(AF_INET6, SOCK_DGRAM, 0)) == -1)
+      return -1;
+
+   bzero(&lifnum, sizeof(lifnum));
+   lifnum.lifn_family = AF_UNSPEC;
+   if ((i = ioctl(s, SIOCGLIFNUM, &lifnum)) == -1) {
+      close(s);
+      return -1;
+   }
+
+   if (lifnum.lifn_count == 0) {
+      close(s);
+      return -1;
+   }
+
+   bzero(&lifconf, sizeof(lifconf));
+   lifconf.lifc_len = lifnum.lifn_count * sizeof(struct lifreq);
+
+   /*XXX pad count? possible race as new interfaces might be added */
+
+   if ((buf = malloc(lifconf.lifc_len)) == NULL) {
+      close(s);
+      return -1;
+   }
+   lifconf.lifc_buf = buf;
+
+   if (ioctl(s, SIOCGLIFCONF, &lifconf) == -1) {
+      free(buf);
+      close(s);
+      return -1;
+   }
+
+   p = lifconf.lifc_buf;
+   while (p < lifconf.lifc_buf + lifconf.lifc_len) {
+      lifreq = (struct lifreq *)p;
+
+      p_addr = p_netmask = p_broaddst = NULL;
+      bzero(&i_addr, sizeof(i_addr));
+      bzero(&i_netmask, sizeof(i_netmask));
+      bzero(&i_broaddst, sizeof(i_broaddst));
+
+      /* invalid name likely indication of a problem */
+      badname = 0;
+      if (lifreq->lifr_name[0] == '\0')
+         badname = 1;
+      else
+         for (i = 0; (size_t)i < sizeof(lifreq->lifr_name); i++) {
+            if (lifreq->lifr_name[i] == '\0')
+               break;
+            if (!isgraph(lifreq->lifr_name[i])) {
+               badname = 1;
+               break;
+            }
+         }
+      if (badname) {
+         free(buf);
+         close(s);
+         errno = EFAULT;
+         return -1;
+      }
+
+#if HAVE_SOCKADDR_SA_LEN
+
+      addrlen = MAX(sizeof(struct sockaddr), lifreq->lifr_addr.sa_len);
+
+#else /*  !HAVE_SOCKADDR_SA_LEN */
+
+      switch (lifreq->lifr_addr.ss_family) {
+         case AF_INET6:
+            addrlen = sizeof(struct sockaddr_in6);
+            break;
+
+#ifdef AF_LINK
+         case AF_LINK:
+            addrlen = sizeof(struct sockaddr_dl);
+            break;
+#endif /* AF_LINK */
+
+         case AF_INET: /*FALLTHROUGH*/
+         default:
+            addrlen = sizeof(struct sockaddr);
+            break;
+      }
+#endif /* !HAVE_SOCKADDR_SA_LEN */
+      addrskip = ROUNDUP(addrlen, sizeof(uint32_t));
+
+      p += MAX(sizeof(lifreq->lifr_name) + addrskip, sizeof(struct lifreq));
+      /* skip everything but inet6 */
+
+      /* get IPv6 addresses only */
+      switch (lifreq->lifr_addr.ss_family) {
+      case AF_INET6:
+         break;
+      default:
+         continue;
+      }
+
+      /* skip unless interface is up */
+      lifreq2 = *lifreq;
+      if (ioctl(s, SIOCGLIFFLAGS, &lifreq2) == -1) {
+         free(buf);
+         close(s);
+         return -1;
+      }
+      flags = lifreq2.lifr_flags;
+#if 0 /* XXX appears to skip aliases configured via ifconfig */
+      if ((flags & IFF_UP) == 0) {
+         continue;
+      }
+#endif
+
+      bzero(&i_addr, sizeof(i_addr));
+      memcpy(&i_addr, &lifreq->lifr_addr,
+             MIN(sizeof(lifreq->lifr_addr), sizeof(i_addr)));
+      p_addr = (struct sockaddr *)&i_addr;
+
+#ifdef SIOCGLIFNETMASK
+      p_netmask = getifval2(s, SIOCGLIFNETMASK, lifreq,
+                           (struct sockaddr *)&i_netmask, addrlen);
+#endif /* SIOCGLIFNETMASK */
+
+#ifdef SIOCGLIFBRDADDR
+      if (flags & IFF_BROADCAST)
+         p_broaddst = getifval2(s, SIOCGLIFBRDADDR, lifreq,
+                               (struct sockaddr *)&i_broaddst, addrlen);
+#endif /* SIOCGLIFBRDADDR */
+
+#ifdef SIOCGLIFDSTADDR
+      if (p_broaddst == NULL && flags & IFF_POINTOPOINT)
+         p_broaddst = getifval2(s, SIOCGLIFDSTADDR, lifreq,
+                               (struct sockaddr *)&i_broaddst, addrlen);
+#endif /* SIOCGLIFDSTADDR */
+
+      /*XXX data */
+      if (ifaddrs_add(ifawrap, lifreq->lifr_name, flags, p_addr, p_netmask,
+                      p_broaddst, NULL, addrlen) == -1) {
+         if (ifawrap->ifaddrs != NULL) {
+            freeifaddrs(ifawrap->ifaddrs);
+            free(buf);
+            close(s);
+            return -1;
+         }
+      }
+   }
+
+   free(buf);
+   close(s);
+   return 0;
 }
-#endif  /* !HAVE_DAEMON */
+
+/* XXX should ideally be merged with getifval() */
+static struct sockaddr *
+getifval2(int s, int flag, struct lifreq *lifreq, struct sockaddr *addr,
+         uint8_t addrlen)
+{
+   char hbuf[NI_MAXHOST];
+   struct lifreq lifreq2;
+
+   lifreq2 = *lifreq;
+   if (ioctl(s, flag, &lifreq2) == -1)
+      return NULL;
+
+   /* family/len might not be correctly set, copy original value */
+//   lifreq2.lifr_addr.ss_family = lifreq->lifr_addr.ss_family;
+#if HAVE_SOCKADDR_SA_LEN
+   lifreq2.lifr_addr.ss_len = addrlen;
+#endif /* HAVE_SOCKADDR_SA_LEN */
+
+   /* XXX verify address correctness for now */
+   if ((lifreq2.lifr_addr.ss_family == AF_INET
+   ||  lifreq2.lifr_addr.ss_family == AF_INET6)
+      && (getnameinfo((struct sockaddr *)&lifreq2.lifr_addr, addrlen,
+                          hbuf, sizeof(hbuf),
+                          NULL,
+                          0,
+                          NI_NUMERICHOST | NI_NUMERICSERV)) != 0) {
+      return NULL;
+   }
+
+   memcpy(addr, &lifreq2.lifr_addr, addrlen);
+   return addr;
+}
+
+#endif /* SIOCGLIFCONF */

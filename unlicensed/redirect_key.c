@@ -1,15 +1,14 @@
 /*
- * $Id: redirect_key.c,v 1.3 2003/07/01 13:21:53 michaels Exp $
+ * $Id: redirect_key.c,v 1.11 2013/08/19 06:55:55 michaels Exp $
  *
- * Copyright (c) 2001, 2002, 2003
+ * Copyright (c) 2001, 2009, 2011
  *      Inferno Nettverk A/S, Norway.  All rights reserved.
  */
 
 #include "common.h"
 
 static const char rcsid[] =
-"$Id: redirect_key.c,v 1.3 2003/07/01 13:21:53 michaels Exp $";
+"$Id: redirect_key.c,v 1.11 2013/08/19 06:55:55 michaels Exp $";
 
-const char *module_redirect_ipaddrv[] = { NULL
-};
-const int module_redirect_ipaddrc = 0;
+const licensekey_t *module_redirect_keyv = NULL;
+const size_t       module_redirect_keyc  = 0;

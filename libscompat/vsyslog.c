@@ -1,18 +1,18 @@
-/* $Id: vsyslog.c,v 1.7 2005/09/17 20:07:15 karls Exp $ */
+/* $Id: vsyslog.c,v 1.14 2013/02/24 20:01:26 karls Exp $ */
 
 #ifdef HAVE_CONFIG_H
 #include "autoconf.h"
-#endif  /* HAVE_CONFIG_H */
+#endif /* HAVE_CONFIG_H */
 
-#include "common.h"
+#include "osdep.h"
+
+#undef vsyslog /* avoid any changes for applications done by headers */
 
 /* attempt to be clever; construct string and call syslog */
 
-#if !HAVE_VSYSLOG
-
 /*
  * Copyright (c) 1983, 1988, 1993
- *	The Regents of the University of California.  All rights reserved.
+ *   The Regents of the University of California.  All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
  * modification, are permitted provided that the following conditions
@@ -22,11 +22,7 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *	This product includes software developed by the University of
- *	California, Berkeley and its contributors.
- * 4. Neither the name of the University nor the names of its contributors
+ * 3. Neither the name of the University nor the names of its contributors
  *    may be used to endorse or promote products derived from this software
  *    without specific prior written permission.
  *
@@ -49,54 +45,47 @@ static char rcsid[] = "$OpenBSD: syslog.c,v 1.8 1998/03/19 00:30:03 millert Exp 
 
 void
 vsyslog(pri, fmt, ap)
-	int pri;
-	register const char *fmt;
-	va_list ap;
+   int pri;
+   register const char *fmt;
+   va_list ap;
 {
-	register char ch, *t;
+   register char ch, *t;
 
-	int saved_errno;
-#define	TBUF_LEN	2048
-#define	FMT_LEN		1024
-	char tbuf[TBUF_LEN], fmt_cpy[FMT_LEN];
-	int fmt_left, prlen;
+   int saved_errno;
+#define   TBUF_LEN   2048
+#define   FMT_LEN      1024
+   char tbuf[TBUF_LEN], fmt_cpy[FMT_LEN];
+   int fmt_left, prlen;
 
-	saved_errno = errno;
+   saved_errno = errno;
 
-	/* Build the message. */
+   /* Build the message. */
 
-	/*
-	 * We wouldn't need this mess if printf handled %m, or if
-	 * strerror() had been invented before syslog().
-	 */
-	for (t = fmt_cpy, fmt_left = FMT_LEN; (ch = *fmt); ++fmt) {
-		if (ch == '%' && fmt[1] == 'm') {
-			++fmt;
-			prlen = snprintf(t, fmt_left, "%s",
-			    strerror(saved_errno));
-			if (prlen >= fmt_left)
-				prlen = fmt_left - 1;
-			t += prlen;
-			fmt_left -= prlen;
-		} else {
-			if (fmt_left > 1) {
-				*t++ = ch;
-				fmt_left--;
-			}
-		}
-	}
-	*t = '\0';
+   /*
+    * We wouldn't need this mess if printf handled %m, or if
+    * strerror() had been invented before syslog().
+    */
+   for (t = fmt_cpy, fmt_left = FMT_LEN; (ch = *fmt); ++fmt) {
+      if (ch == '%' && fmt[1] == 'm') {
+         ++fmt;
+         prlen = snprintf(t, fmt_left, "%s",
+             strerror(saved_errno));
+         if (prlen >= fmt_left)
+            prlen = fmt_left - 1;
+         t += prlen;
+         fmt_left -= prlen;
+      } else {
+         if (fmt_left > 1) {
+            *t++ = ch;
+            fmt_left--;
+         }
+      }
+   }
+   *t = '\0';
 
-	prlen = vsnprintf(tbuf, TBUF_LEN, fmt_cpy, ap);
+   prlen = vsnprintf(tbuf, TBUF_LEN, fmt_cpy, ap);
 
-	syslog(pri, "%s", tbuf);
+   syslog(pri, "%s", tbuf);
 
-	return;
+   return;
 }
-#else
-static void avoid_error __P((void));
-static void avoid_error()
-{
-	avoid_error();
-}
-#endif /* !HAVE_VSYSLOG */

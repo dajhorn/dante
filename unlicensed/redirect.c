@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2001, 2002, 2003
+ * Copyright (c) 2001, 2008, 2009, 2010, 2011, 2012
  *      Inferno Nettverk A/S, Norway.  All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
@@ -44,10 +44,10 @@
 #include "common.h"
 
 static const char rcsid[] =
-"$Id: redirect.c,v 1.4 2003/07/01 13:21:53 michaels Exp $";
+"$Id: redirect.c,v 1.18 2013/03/06 07:50:37 michaels Exp $";
 
 const char module_redirect_version[] =
-"$Id: redirect.c,v 1.4 2003/07/01 13:21:53 michaels Exp $";
+"$Id: redirect.c,v 1.18 2013/03/06 07:50:37 michaels Exp $";
 
 
 void
@@ -57,14 +57,37 @@ redirectsetup(void)
 }
 
 int
-redirect(s, addr, host, command, from, to)
-	int s;
-	struct sockaddr *addr;
-	struct sockshost_t *host;
-	int command;
-	const struct ruleaddress_t *from;
-	const struct ruleaddress_t *to;
+redirect(s, addr,
+#if !BAREFOOTD
+         host,
+#endif /* !BAREFOOTD */
+         command, from
+#if !BAREFOOTD
+         , to
+#endif /* !BAREFOOTD */
+        )
+   int s;
+   struct sockaddr_storage *addr;
+#if !BAREFOOTD
+   struct sockshost_t *host;
+#endif /* !BAREFOOTD */
+   int command;
+   const struct ruleaddr_t *from;
+#if !BAREFOOTD
+   const struct ruleaddr_t *to;
+#endif /* !BAREFOOTD */
 {
 
-	return 0;
+   (void)s;
+   (void)addr;
+#if !BAREFOOTD
+   (void)host;
+#endif /* !BAREFOOTD */
+   (void)command;
+   (void)from;
+#if !BAREFOOTD
+   (void)to;
+#endif /* !BAREFOOTD */
+
+   return 0;
 }
