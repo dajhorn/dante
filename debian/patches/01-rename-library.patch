@@ -1,46 +1,21 @@
 Rename the libdsocks library to libdsocskd to avoid a conflict with
 the libsocks4 package (#52475).
 
+Index: b/bin/socksify.in
+===================================================================
 --- a/bin/socksify.in
 +++ b/bin/socksify.in
-@@ -52,7 +52,7 @@
- LIBDIR="@LIBRARY_PREFIX@"
+@@ -72,7 +72,7 @@
  
- #XXX shared library name should be generated too (possibly including version)
--LIBRARY="${SOCKS_LIBRARY-${LIBDIR}/libdsocks.@SOLIB_POSTFIX@}"
-+LIBRARY="${SOCKS_LIBRARY-${LIBDIR}/libdsocksd.@SOLIB_POSTFIX@}.0"
+ #dlib/Makefile.am libtool flags should produce a predictable library name
+ #(ending in SOLIB_POSTFIX).
+-LIBRARY="${SOCKS_LIBRARY:-${FULLPATH}libdsocks.@SOLIB_POSTFIX@}"
++LIBRARY="${SOCKS_LIBRARY:-${FULLPATH}libdsocksd.@SOLIB_POSTFIX@}"
  
+ #platform dependent LD_PRELOAD-variant format
  PRELOAD_SEPERATOR="@PRELOAD_SEPERATOR@"
- PRELOAD_POSTFIX="@PRELOAD_POSTFIX@"
---- a/doc/faq.tex
-+++ b/doc/faq.tex
-@@ -475,7 +475,7 @@
-    edit the file /etc/ld.so.preload
-    and add two lines saying:
-       libdl.so
--      libdsocks.so
-+      libdsocksd.so
-   \end{verbatim}
-  \emph{Thanks to: Dag Wieers <dag@wieers.com>.}
- 
-@@ -489,7 +489,7 @@
-   you could add
- 
-   \begin{verbatim}
--   LD_PRELOAD="libdl.so libdsocks.so"
-+   LD_PRELOAD="libdl.so libdsocksd.so.0"
-    export LD_PRELOAD
-   \end{verbatim}
-   to the environment. (/etc/profile ~/.profile ~/.bashrc)
-@@ -528,7 +528,7 @@
-   the result becomes the the same as not using socksify on them.
- 
-   Solution: strip off the suid bit if possible or recompile the binary
--  (rsh, ssh, etc) with explicit socks support (adding "-ldsocks"
-+  (rsh, ssh, etc) with explicit socks support (adding "-ldsocksd"
-   to the linkoptions is usually enough.)
- 
-  \subsection{Why doesn't socksify work on HP-UX 11.00?}
+Index: b/doc/README.socksify
+===================================================================
 --- a/doc/README.socksify
 +++ b/doc/README.socksify
 @@ -2,7 +2,7 @@
@@ -52,6 +27,8 @@ the libsocks4 package (#52475).
  then wrap all networking-related system calls.
  
  When used the script can socksify a program by simply giving it as a
+Index: b/doc/README.usage
+===================================================================
 --- a/doc/README.usage
 +++ b/doc/README.usage
 @@ -7,15 +7,15 @@
@@ -75,7 +52,7 @@ the libsocks4 package (#52475).
  Static Compilation
 @@ -24,8 +24,8 @@
  changed to use socks, even if it is not linked dynamically.
- Several systemcalls and librarycalls must be changed to use the
+ Several system calls and library calls must be changed to use the
  socksified versions instead of the standard ones.  The application
 -is then linked with the libsocks library in the distribution (-lsocks,
 -not -ldsocks).
@@ -94,26 +71,8 @@ the libsocks4 package (#52475).
 + libsocksd.so  - standard shared library, contains Rfoo type functions.
 + libsocksd.a   - static version of the above.
 + libdsocksd.so - shared library which does "on the fly" socksification.
---- a/lib/Makefile.in
-+++ b/lib/Makefile.in
-@@ -213,7 +213,7 @@
- subdirs = @subdirs@
- sysconfdir = @sysconfdir@
- target_alias = @target_alias@
--lib_LTLIBRARIES = libsocks.la
-+lib_LTLIBRARIES = libsocksd.la
- libsocks_la_SOURCES = config_parse.y config_scan.l Raccept.c Rbind.c \
- 	Rgetpeername.c Rgetsockname.c Rrresvport.c io.c    \
- 	address.c authneg.c client.c clientconfig.c clientprotocol.c \
-@@ -302,7 +302,7 @@
- 	  rm -f config_parse.c; \
- 	  $(MAKE) config_parse.c; \
- 	else :; fi
--libsocks.la: $(libsocks_la_OBJECTS) $(libsocks_la_DEPENDENCIES) 
-+libsocksd.la: $(libsocks_la_OBJECTS) $(libsocks_la_DEPENDENCIES) 
- 	$(LINK) -rpath $(libdir) $(libsocks_la_LDFLAGS) $(libsocks_la_OBJECTS) $(libsocks_la_LIBADD) $(LIBS)
- 
- mostlyclean-compile:
+Index: b/dlib/int_osf3.c
+===================================================================
 --- a/dlib/int_osf3.c
 +++ b/dlib/int_osf3.c
 @@ -81,7 +81,7 @@
@@ -125,30 +84,12 @@ the libsocks4 package (#52475).
     using the new versions. */
  
  /* sockaddr struct, with sa_len */
---- a/dlib/Makefile.in
-+++ b/dlib/Makefile.in
-@@ -214,7 +214,7 @@
- subdirs = @subdirs@
- sysconfdir = @sysconfdir@
- target_alias = @target_alias@
--lib_LTLIBRARIES = libdsocks.la
-+lib_LTLIBRARIES = libdsocksd.la
- libdsocks_la_SOURCES = interposition.c int_osf1.c int_osf2.c int_osf3.c \
- 	../lib/config_parse.y ../lib/io.c ../lib/debug.c ../lib/udp.c \
- 	../lib/Rgetpeername.c ../lib/Rgetsockname.c \
-@@ -304,7 +304,7 @@
- 	  rm -f config_parse.c; \
- 	  $(MAKE) config_parse.c; \
- 	else :; fi
--libdsocks.la: $(libdsocks_la_OBJECTS) $(libdsocks_la_DEPENDENCIES) 
-+libdsocksd.la: $(libdsocks_la_OBJECTS) $(libdsocks_la_DEPENDENCIES) 
- 	$(LINK) -rpath $(libdir) $(libdsocks_la_LDFLAGS) $(libdsocks_la_OBJECTS) $(libdsocks_la_LIBADD) $(LIBS)
- 
- mostlyclean-compile:
+Index: b/include/socks.h
+===================================================================
 --- a/include/socks.h
 +++ b/include/socks.h
-@@ -237,7 +237,7 @@
- __BEGIN_DECLS
+@@ -471,7 +471,7 @@
+ typedef sigset_t addrlockopaque_t;
  
  /*
 - * libsocks function declarations
@@ -156,3 +97,47 @@ the libsocks4 package (#52475).
   */
  
  void
+Index: b/dlib/Makefile.in
+===================================================================
+--- a/dlib/Makefile.in
++++ b/dlib/Makefile.in
+@@ -296,7 +296,7 @@
+ top_build_prefix = @top_build_prefix@
+ top_builddir = @top_builddir@
+ top_srcdir = @top_srcdir@
+-lib_LTLIBRARIES = libdsocks.la
++lib_LTLIBRARIES = libdsocksd.la
+ #NOTE: file additions below also need to be added to dlib64/Makefile.am
+ #the interposition.c file is compiled first as it historically has had
+ #most compile problems.
+@@ -406,7 +406,7 @@
+ 	  echo "rm -f \"$${dir}/so_locations\""; \
+ 	  rm -f "$${dir}/so_locations"; \
+ 	done
+-libdsocks.la: $(libdsocks_la_OBJECTS) $(libdsocks_la_DEPENDENCIES) 
++libdsocksd.la: $(libdsocks_la_OBJECTS) $(libdsocks_la_DEPENDENCIES)
+ 	$(AM_V_CCLD)$(libdsocks_la_LINK) -rpath $(libdir) $(libdsocks_la_OBJECTS) $(libdsocks_la_LIBADD) $(LIBS)
+ 
+ mostlyclean-compile:
+Index: b/lib/Makefile.in
+===================================================================
+--- a/lib/Makefile.in
++++ b/lib/Makefile.in
+@@ -282,7 +282,7 @@
+ top_build_prefix = @top_build_prefix@
+ top_builddir = @top_builddir@
+ top_srcdir = @top_srcdir@
+-lib_LTLIBRARIES = libsocks.la
++lib_LTLIBRARIES = libsocksd.la
+ #config_parse/scan compiled first to get yacc/lex run as early as possible
+ #(other dirs rely on yacc/lex being run here).
+ libsocks_la_SOURCES = config_parse.c config_scan.c                      \
+@@ -391,7 +391,7 @@
+ 	  echo "rm -f \"$${dir}/so_locations\""; \
+ 	  rm -f "$${dir}/so_locations"; \
+ 	done
+-libsocks.la: $(libsocks_la_OBJECTS) $(libsocks_la_DEPENDENCIES) 
++libsocksd.la: $(libsocks_la_OBJECTS) $(libsocks_la_DEPENDENCIES)
+ 	$(AM_V_CCLD)$(libsocks_la_LINK) -rpath $(libdir) $(libsocks_la_OBJECTS) $(libsocks_la_LIBADD) $(LIBS)
+ 
+ mostlyclean-compile:
