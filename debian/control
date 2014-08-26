@@ -5,7 +5,7 @@ Maintainer: Ubuntu Developers <ubuntu-devel-discuss@lists.ubuntu.com>
 XSBC-Original-Maintainer: Peter Pentchev <roam@ringlet.net>
 Build-Depends: flex,debhelper(>=7),quilt,libtool,autotools-dev,libwrap0-dev,libpam0g-dev
 Homepage: http://www.inet.no/dante/
-Standards-Version: 3.8.1
+Standards-Version: 3.9.5
 Vcs-Svn: http://svn.ringlet.net/svn/ringlet/net/dante/trunk/dante-pkg/debian
 Vcs-Browser: http://svn.ringlet.net/cgi-bin/viewvc/viewvc.cgi/ringlet/net/dante/trunk/dante-pkg/debian/
 
