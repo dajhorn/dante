@@ -57,7 +57,7 @@ install:	build
 	for i in example/socks*.conf; do \
 		sed -e 's/sample socks.conf/sample dante.conf/' < "$$i" > example/renamed/"`basename $$i | sed -e s/socks/dante/`"; \
 	done
-	dh_installdocs -A README doc/faq.tex doc/README.usage doc/README.survey BUGS CREDITS TODO SUPPORT
+	dh_installdocs -A README doc/README.usage doc/README.survey BUGS CREDITS SUPPORT
 	dh_installdocs -pdante-client doc/README.socksify
 	dh_installdocs -pdante-client -pdante-server
 	dh_installdocs -pdante-server doc/SOCKS4.protocol
