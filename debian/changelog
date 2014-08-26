@@ -1,3 +1,14 @@
+dante (1.4.0-1) trusty; urgency=medium
+
+  * Imported Upstream version 1.4.0
+  * Refresh debian/patches after git-import-dsc.
+  * Update dh_installdocs.
+  * Update libdsocksd0.install for unversioned library.
+  * Promote debian/control standards version.
+  * Cease symbol tracking.
+
+ -- Darik Horn <dajhorn@vanadac.com>  Tue, 26 Aug 2014 17:54:01 -0400
+
 dante (1.1.19.dfsg-3ubuntu11) trusty; urgency=medium
 
   * No-change rebuild against eglibc 2.19.
