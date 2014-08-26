@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 1997, 1998, 1999, 2000, 2001, 2002, 2003
+ * Copyright (c) 1997, 1998, 1999, 2000, 2001, 2013
  *      Inferno Nettverk A/S, Norway.  All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
@@ -41,9 +41,15 @@
  *
  */
 
-/* $Id: yacconfig.h,v 1.11 2003/07/01 13:21:19 michaels Exp $ */
+/* $Id: yacconfig.h,v 1.21 2013/10/27 15:24:41 karls Exp $ */
 
-#if 1
+#ifndef _YACCONFIG_H_
+#define _YACCONFIG_H_
+
+/*
+ * avoid symbolconflicts if socksifying programs that also use yacc/lex.
+ */
+
 #define yyact socks_yyact
 #define yychar socks_yychar
 #define yychk socks_yychk
@@ -51,7 +57,9 @@
 #define yydef socks_yydef
 #define yyerrflag socks_yyerrflag
 #define yyerror socks_yyerror
+#define yyerrorx socks_yyerrorx
 #define yywarn socks_yywarn
+#define yywarnx socks_yywarnx
 #define yyexca socks_yyexca
 #define yylex socks_yylex
 #define yylval socks_yylval
@@ -73,7 +81,6 @@
 #define yyback socks_yyback
 #define yybgin socks_yybgin
 #define yycrank socks_yycrank
-#define yyerror socks_yyerror
 #define yyestate socks_yyestate
 #define yyextra socks_yyextra
 #define yyfnd socks_yyfnd
@@ -108,18 +115,53 @@
 #define yy_switch_to_buffer socks_yy_switch_to_buffer
 #define yyleng socks_yyleng
 #define yyrestart socks_yyrestart
-#endif
 
-#if 0
-#define yylhs
-#define yylen
-#define yydefred
-#define yydgoto
-#define yysindex
-#define yygindex
-#define yytable
-#define yycheck
-#define yylhs
-#define yylhs
-#define yylhs
-#endif
+
+
+typedef enum { VALUETYPE_ERRNO = 1, VALUETYPE_GAIERR } valuetype_t;
+
+void
+yywarn(const char *fmt, ...)
+   __ATTRIBUTE__((FORMAT(printf, 1, 2)));
+
+void
+yywarnx(const char *fmt, ...)
+   __ATTRIBUTE__((FORMAT(printf, 1, 2)));
+
+/*
+ * Report an error related to (config file) parsing.
+ */
+
+void
+yyerror(const char *fmt, ...)
+   __ATTRIBUTE__((FORMAT(printf, 1, 2)));
+
+void
+yyerrorx(const char *fmt, ...)
+   __ATTRIBUTE__((FORMAT(printf, 1, 2)));
+
+/*
+ * Report an error related to (config file) parsing and exit.
+ */
+
+
+void
+yylog(const int loglevel, const char *fmt, ...)
+   __ATTRIBUTE__((FORMAT(printf, 2, 3)));
+
+/*
+ * Log a parsing-related notice at loglevel "loglevel".
+ */
+
+
+void yyerrorx_nolib(const char *library);
+void yywarnx_deprecated(const char *oldkeyword, const char *newkeyword);
+void yyerrorx_nonetmask(void);
+void yyerrorx_hasnetmask(void);
+/*
+ * misc. error functions related to specific parsing errorrs.
+ */
+
+
+
+#endif /* !_YACCONFIG_H_ */

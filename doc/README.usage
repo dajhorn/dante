@@ -1,4 +1,4 @@
-$Id: README.usage,v 1.7 2005/06/10 11:22:21 michaels Exp $
+$Id: README.usage,v 1.11 2012/12/31 20:51:30 karls Exp $
 
 The socks package can be used in two ways.
 
@@ -22,22 +22,23 @@ Static Compilation
 
 	If the source code for an application is available it can be
 changed to use socks, even if it is not linked dynamically.
-Several systemcalls and librarycalls must be changed to use the
+Several system calls and library calls must be changed to use the
 socksified versions instead of the standard ones.  The application
 is then linked with the libsocks library in the distribution (-lsocks,
 not -ldsocks).
 
 These function calls can be found in the socks library:
 Raccept
-Rbind 
+Rbind
 Rbindresvport
 Rconnect
-Rgetaddrinfo()
+Rgetaddrinfo
 Rgethostbyname
 Rgethostbyname2
-Rgetipnodebyname()
+Rgetipnodebyname
 Rgetpeername
 Rgetsockname
+Rlisten
 Rread
 Rreadv
 Rrecv
@@ -53,7 +54,6 @@ Rwritev
 
 These calls currently does nothing and are only provided for
 compatibility with programs which use them:
-Rlisten
 Rselect
 SOCKSinit
 
@@ -61,7 +61,7 @@ The source can either be modified directly, or by using defines to
 change the source during compilation, as following:
 
 Either add this line to the command compilation line (e.g. CFLAGS):
--Dconnect=Rconnect -Dbind=Rbind -Dgetsockname=Rgetsockname -Dgetpeername=Rgetpeername -Daccept=Raccept -Drresvport=Rrresvport -Dbindresvport=Rbindresvport -Dgethostbyname=Rgethostbyname -Dgethostbyname2=Rgethostbyname2 -Dsendto=Rsendto -Drecvfrom=Rrecvfrom -Drecvfrom=Rrecvfrom -Dwrite=Rwrite -Dwritev=Rwritev -Dsend=Rsend -Dsendmsg=Rsendmsg -Dread=Rread -Dreadv=Rreadv -Drecv=Rrecv -Drecvmsg=Rrecvmsg -Dgetaddrinfo=Rgetaddrinfo -Dgetipnodebyname=Rgetipnodebyname
+-Dconnect=Rconnect -Dbind=Rbind -Dgetsockname=Rgetsockname -Dgetpeername=Rgetpeername -Daccept=Raccept -Drresvport=Rrresvport -Dbindresvport=Rbindresvport -Dgethostbyname=Rgethostbyname -Dgethostbyname2=Rgethostbyname2 -Dsendto=Rsendto -Drecvfrom=Rrecvfrom -Drecvfrom=Rrecvfrom -Dwrite=Rwrite -Dwritev=Rwritev -Dlisten=Rlisten -Dsend=Rsend -Dsendmsg=Rsendmsg -Dread=Rread -Dreadv=Rreadv -Drecv=Rrecv -Drecvmsg=Rrecvmsg -Dgetaddrinfo=Rgetaddrinfo -Dgetipnodebyname=Rgetipnodebyname
 
 or add "include <socks.h>" to every C file in the program you are
 compiling.

@@ -1,5 +1,6 @@
 /*
- * Copyright (c) 1997, 1998, 1999, 2000, 2001, 2002, 2003
+ * Copyright (c) 1997, 1998, 1999, 2000, 2001, 2002, 2005, 2008, 2009, 2010,
+ *               2011, 2012, 2013
  *      Inferno Nettverk A/S, Norway.  All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
@@ -43,43 +44,187 @@
 
 #include "common.h"
 
+#if HAVE_SHADOW_H && HAVE_GETSPNAM
+#include <shadow.h>
+#endif /* HAVE_SHADOW_H && HAVE_GETSPNAM */
+
 static const char rcsid[] =
-"$Id: auth_password.c,v 1.9 2005/06/06 11:26:59 michaels Exp $";
+"$Id: auth_password.c,v 1.41 2013/10/27 15:24:42 karls Exp $";
+
+static const char *
+sockd_getpasswordhash(const char *login, char *pw, const size_t pwsize,
+                      char *emsg, const size_t emsglen);
+/*
+ * Fetches the password hash for the username "login".
+ * The returned hash is stored in "pw", which is of size "pwsize".
+ *
+ * Returns the password hash on success, or NULL on failure.  On failure,
+ * emsg, which must be of size emsglen, contains the reason for the error.
+ */
 
 int
-passwordcheck(name, clearpassword, emsg, emsglen)
-	const char *name;
-	const char *clearpassword;
-	char *emsg;
-	size_t emsglen;
+passwordcheck(name, cleartextpw, emsg, emsglen)
+   const char *name;
+   const char *cleartextpw;
+   char *emsg;
+   size_t emsglen;
 {
-/*	const char *function = "passwordcheck()"; */
-	struct passwd *pw;
-	char *salt, *password;
-	uid_t euid;
+   const char *function = "passwordcheck()";
+   const char *p;
+   char visstring[MAXNAMELEN * 4], pwhash[MAXPWLEN],  *crypted;
+   int rc;
 
-	socks_seteuid(&euid, sockscf.uid.privileged);
-	pw = socks_getpwnam(name);
-	socks_reseteuid(sockscf.uid.privileged, euid);
+   slog(LOG_DEBUG, "%s: name = %s, password = %s",
+        function,
+         str2vis(name,
+                 strlen(name),
+                 visstring,
+                 sizeof(visstring)),
+        cleartextpw == NULL ? "<empty>" : "<cleartextpw>");
 
-	if (pw == NULL) {
-		snprintfn(emsg, emsglen, "system username/password failed");
-		return -1;
-	}
+   if (cleartextpw == NULL) {
+      /*
+       * No password to check.  I.e. the authmethod used does not care
+       * about passwords, only whether the user exists or not. E.g.
+       * rfc931/ident.
+       */
+      if (getpwnam(name) == NULL) {
+         snprintf(emsg, emsglen, "no user \"%s\" found in system password file",
+                  str2vis(name,
+                          strlen(name),
+                          visstring,
+                          sizeof(visstring)));
+         return -1;
+      }
+      else
+         /*
+          * User is in the passwordfile, and that is all we care about.
+          */
+         return 0;
+   }
 
-	if (clearpassword != NULL) {
-		salt		= pw->pw_passwd;
-		password = pw->pw_passwd;
+   /*
+    * Else: the authmethod used requires us to match the password also.
+    */
 
-		if (strcmp(crypt(clearpassword, salt), password) == 0)
-			return 0;
-		else {
-			snprintfn(emsg, emsglen, "system password userauthentication failed");
-			return -1;
-		}
-	}
-	else
-		return 0;
+   /* usually need privileges to look up the password. */
+   sockd_priv(SOCKD_PRIV_FILE_READ, PRIV_ON);
+   p = sockd_getpasswordhash(name,
+                             pwhash,
+                             sizeof(pwhash),
+                             emsg,
+                             emsglen);
+   sockd_priv(SOCKD_PRIV_FILE_READ, PRIV_OFF);
 
-	return -1;
+   if (p == NULL)
+      return -1;
+
+   /*
+    * Have the passwordhash for the user.  Does it match the provided password?
+    */
+
+   crypted = crypt(cleartextpw, pwhash);
+
+   if (crypted == NULL) { /* strange. */
+      snprintf(emsg, emsglen,
+               "system password crypt(3) failed for user \"%s\": %s",
+               str2vis(name,
+                       strlen(name),
+                       visstring,
+                       sizeof(visstring)),
+               strerror(errno));
+
+      swarnx("%s: Strange.  This should not happen: %s", function, emsg);
+      rc = -1;
+   }
+   else {
+      if (strcmp(crypted, pwhash) == 0)
+         rc = 0;
+      else {
+         snprintf(emsg, emsglen,
+                  "system password authentication failed for user \"%s\"",
+                  str2vis(name,
+                          strlen(name),
+                          visstring,
+                          sizeof(visstring)));
+         rc = -1;
+      }
+   }
+
+   bzero(pwhash, sizeof(pwhash));
+   return rc;
+}
+
+static const char *
+sockd_getpasswordhash(login, pw, pwsize, emsg, emsglen)
+   const char *login;
+   char *pw;
+   const size_t pwsize;
+   char *emsg;
+   const size_t emsglen;
+{
+   const char *function = "socks_getencrypedpassword()";
+   const char *pw_db = NULL;
+   const int errno_s = errno;
+   char visstring[MAXNAMELEN * 4];
+
+#if HAVE_GETSPNAM /* sysv stuff. */
+   struct spwd *spwd;
+
+   if ((spwd = getspnam(login)) != NULL)
+      pw_db = spwd->sp_pwdp;
+
+#elif HAVE_GETPRPWNAM /* some other broken stuff. */
+   /*
+    * don't know how this looks and don't know anybody using it.
+    */
+
+#error "getprpwnam() not supported yet.  Please contact Inferno Nettverk A/S "
+       "if you would like to see support for it."
+
+#else /* normal BSD stuff. */
+   struct passwd *pwd;
+
+   if ((pwd = getpwnam(login)) != NULL)
+      pw_db = pwd->pw_passwd;
+#endif /* normal BSD stuff. */
+
+   if (pw_db == NULL) {
+      snprintf(emsg, emsglen,
+               "could not access user \"%s\"'s records in the system "
+               "password file: %s",
+               str2vis(login, strlen(login), visstring, sizeof(visstring)),
+               strerror(errno));
+
+      return NULL;
+   }
+
+   if (strlen(pw_db) + 1 /* NUL */ > pwsize) {
+      snprintf(emsg, emsglen,
+               "%s: password set for user \"%s\" in the system password file "
+               "is too long.  The maximal supported length is %lu, but the "
+               "length of the password is %lu characters",
+               function,
+               str2vis(login,
+                      strlen(login),
+                      visstring,
+                      sizeof(visstring)),
+               (unsigned long)(pwsize - 1),
+               (unsigned long)strlen(pw_db));
+
+      swarnx("%s: %s", function, emsg);
+      return NULL;
+   }
+
+   strcpy(pw, pw_db);
+
+   /*
+    * some systems can set errno even on success. :-/
+    * E.g. OpenBSD 4.4. seems to do this.  Looks like it tries
+    * /etc/spwd.db first, and if that fails, /etc/pwd.db, but it
+    * forgets to reset errno.
+    */
+   errno = errno_s;
+
+   return pw;
 }

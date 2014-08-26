@@ -1,5 +1,6 @@
 /*
- * Copyright (c) 1997, 1998, 1999, 2000, 2001, 2002, 2003
+ * Copyright (c) 1997, 1998, 1999, 2000, 2001, 2002, 2005, 2008, 2009, 2010,
+ *               2011, 2012
  *      Inferno Nettverk A/S, Norway.  All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
@@ -44,48 +45,69 @@
 #include "common.h"
 
 static const char rcsid[] =
-"$Id: client.c,v 1.57 2005/10/07 12:31:47 michaels Exp $";
+"$Id: client.c,v 1.108 2013/01/02 13:22:39 karls Exp $";
 
-#if !HAVE_PROGNAME
-	char *__progname = "danteclient";
-#endif
+
+#if HAVE_DARWIN || !HAVE_PROGNAME
+   char *__progname = "danteclient";
+#endif /* HAVE_DARWIN || !HAVE_PROGNAME */
 
 int
 SOCKSinit(progname)
-	char *progname;
+   char *progname;
 {
 
-	__progname = progname;
-	return 0;
+   __progname = progname;
+   return 0;
 }
 
 void
 clientinit(void)
 {
-/*	const char *function = "clientinit()"; */
-	static int initing;
+#ifdef HAVE_VOLATILE_SIG_ATOMIC_T
+   static sig_atomic_t initing; /* XXX should be our threadid. */
+#else
+   static volatile sig_atomic_t initing;
+#endif /* HAVE_VOLATILE_SIG_ATOMIC_T */
+/*   const char *function = "clientinit()"; */
 
-	if (sockscf.state.init)
-		return;
+   if (sockscf.state.inited
+      /*
+       * XXX should really be sched_yield() or something if initing, unless
+       * the thread initing is ours.  If the thread initing is ours,
+       * we can just return, to handle recursive problems during init.
+       */
+   ||  initing)
+      return;
 
-	if (initing)
-		return;
-	initing = 1;
+   initing = 1;
 
-	if (issetugid())
-		sockscf.option.configfile = SOCKS_CONFIGFILE;
-	else
-		if ((sockscf.option.configfile = getenv("SOCKS_CONF")) == NULL)
-			sockscf.option.configfile = SOCKS_CONFIGFILE;
+   sockscf.loglock = -1;
 
-	/*
-	 * initialize misc. options to sensible default.
-	 */
-	sockscf.resolveprotocol	= RESOLVEPROTOCOL_UDP;
+#if HAVE_DARWIN
+   __progname = getprogname();
+#endif /* HAVE_DARWIN */
 
-	genericinit();
+/*   sleep(20);    */
 
-	slog(LOG_INFO, "%s/client v%s running", PACKAGE, VERSION);
-	initing = 0;
+   /* needs to be as early as possible, before any i/o calls if possible. */
+   socks_addrinit();
+
+   if ((sockscf.option.configfile = socks_getenv(ENV_SOCKS_CONF, dontcare))
+   == NULL)
+      sockscf.option.configfile = SOCKS_CONFIGFILE;
+
+   genericinit();
+   newprocinit();
+
+   /* no writing to stderr in client, so need to delay until here. */
+   runenvcheck();
+
+   showconfig(&sockscf);
+
+   slog(LOG_INFO, "%s/client v%s running", PRODUCT, VERSION);
+/*   sleep(20);                           */
+
+   sockscf.state.inited = 1;
+   initing = 0;
 }
-

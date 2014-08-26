@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 1997, 1998, 1999, 2000, 2001, 2002, 2003
+ * Copyright (c) 1997, 1998, 1999, 2000, 2001, 2008, 2009, 2010, 2011, 2012
  *      Inferno Nettverk A/S, Norway.  All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
@@ -44,79 +44,182 @@
 #include "common.h"
 
 static const char rcsid[] =
-"$Id: userio.c,v 1.23 2003/07/01 13:21:33 michaels Exp $";
+"$Id: userio.c,v 1.60 2012/11/01 23:57:57 michaels Exp $";
 
 /* ARGSUSED */
 char *
 socks_getusername(host, buf, buflen)
-	const struct sockshost_t *host;
-	char *buf;
-	size_t buflen;
+   const sockshost_t *host;
+   char *buf;
+   size_t buflen;
 {
-	const char *function = "socks_getusername()";
-	char *name;
+   const char *function = "socks_getusername()";
+   char *name;
 
-	if ((name = getenv("SOCKS_USERNAME"))	!= NULL
-	||  (name = getenv("SOCKS_USER"))		!= NULL
-	||  (name = getenv("SOCKS5_USER"))		!= NULL)
-		;
-	else if ((name = getlogin()) != NULL)
-		;
-	else {
-		struct passwd *pw;
+   if ((name = socks_getenv(ENV_SOCKS_USERNAME, dontcare)) != NULL
+   ||  (name = socks_getenv(ENV_SOCKS_USER,     dontcare)) != NULL
+   ||  (name = socks_getenv(ENV_SOCKS5_USER,    dontcare)) != NULL)
+      slog(LOG_NEGOTIATE,
+           "%s: using socks username from environment: \"%s\"", function, name);
+#if SOCKS_CLIENT
+   else {
+      struct passwd *pw;
 
-		if ((pw = getpwuid(getuid())) != NULL)
-			name = pw->pw_name;
-	}
+      if ((pw = getpwuid(getuid())) != NULL)
+         name = pw->pw_name;
+      else
+         name = getlogin();
+   }
+#endif /* SOCKS_CLIENT */
 
-	if (name == NULL)
-		return NULL;
+   if (name == NULL)
+      return NULL;
 
-	if (strlen(name) >= buflen) {
-		swarnx("%s: socks username %d characters too long, truncated",
-		function, (strlen(name) + 1) - buflen);
-		name[buflen - 1] = NUL;
-	}
+   if (strlen(name) >= buflen) {
+      swarnx("%s: socks username %lu characters too long, truncated",
+      function, (unsigned long)((strlen(name) + 1) - buflen));
+      name[buflen - 1] = NUL;
+   }
 
-	strcpy(buf, name);
-
-	return buf;
+   strcpy(buf, name);
+   return buf;
 }
 
 char *
 socks_getpassword(host, user, buf, buflen)
-	const struct sockshost_t *host;
-	const char *user;
-	char *buf;
-	size_t buflen;
+   const sockshost_t *host;
+   const char *user;
+   char *buf;
+   size_t buflen;
 {
-	const char *function = "socks_getpassword()";
-	char *password;
+   const char *function = "socks_getpassword()";
+   char *password;
+   int password_is_from_env;
 
-	if ((password = getenv("SOCKS_PASSWORD"))		!= NULL
-	||  (password = getenv("SOCKS_PASSWD"))		!= NULL
-	||  (password = getenv("SOCKS5_PASSWD"))		!= NULL)
-		;
-	else {
-		char prompt[256 + MAXSOCKSHOSTSTRING];
-		char hstring[MAXSOCKSHOSTSTRING];
+   if ((password = socks_getenv(ENV_SOCKS_PASSWORD, dontcare)) != NULL
+   ||  (password = socks_getenv(ENV_SOCKS_PASSWD,   dontcare)) != NULL
+   ||  (password = socks_getenv(ENV_SOCKS5_PASSWD,  dontcare)) != NULL)
+      password_is_from_env = 1;
+   else {
+#if SOCKS_CLIENT && HAVE_GETPASS
+      char prompt[256 + MAXSOCKSHOSTSTRING];
+      char hstring[MAXSOCKSHOSTSTRING];
 
-		snprintfn(prompt, sizeof(prompt), "%s@%s sockspassword: ",
-		user, sockshost2string(host, hstring, sizeof(hstring)));
-		password = getpass(prompt);
-	}
+      snprintf(prompt, sizeof(prompt), "%s@%s socks password: ",
+               user, sockshost2string(host, hstring, sizeof(hstring)));
 
-	if (password == NULL)
-		return NULL;
+      password = getpass(prompt);
 
-	if (strlen(password) >= buflen) {
-		swarnx("%s: socks password %d characters too long, truncated",
-		function, (strlen(password) + 1) - buflen);
-		password[buflen - 1] = NUL;
-	}
+#else /* !SOCKS_CLIENT && HAVE_GETPASS */
 
-	strcpy(buf, password);
-	bzero(password, strlen(password));
+      password = NULL;
+#endif /* !SOCKS_CLIENT && HAVE_GETPASS */
 
-	return buf;
+      password_is_from_env = 0;
+   }
+
+   if (password == NULL)
+      return NULL;
+
+   if (strlen(password) >= buflen) {
+      swarnx("%s: socks password is %lu characters too long; truncated",
+             function, (unsigned long)((strlen(password) + 1) - buflen));
+
+      password[buflen - 1] = NUL;
+   }
+
+   strcpy(buf, password);
+
+   if (!password_is_from_env) /* don't zero environment. */
+      bzero(password, strlen(password));
+
+   return buf;
+}
+
+char *
+socks_getenv(name, value)
+   const char *name;
+   value_t value;
+{
+   char *p = NULL;
+
+#if SOCKS_CLIENT
+#if HAVE_CONFENV_DISABLE
+   const char *safenames[] = { ENV_SOCKS_BINDLOCALONLY,
+                               ENV_SOCKS_DEBUG,
+                               ENV_SOCKS_DISABLE_THREADLOCK,
+                               ENV_SOCKS_DIRECTROUTE_FALLBACK,
+                               ENV_SOCKS_PASSWORD,
+                               ENV_SOCKS_PASSWD,
+                               ENV_SOCKS5_PASSWD,
+                               ENV_SOCKS_USERNAME,
+                               ENV_SOCKS_USER,
+                               ENV_SOCKS5_USER,
+   };
+   size_t i;
+#endif /* HAVE_CONFENV_DISABLE */
+
+   if (strcmp(name, ENV_SOCKS_CONF)         == 0
+   ||  strcmp(name, ENV_SOCKS_LOGOUTPUT)    == 0
+   ||  strcmp(name, ENV_SOCKS_ERRLOGOUTPUT) == 0
+   ||  strcmp(name, ENV_TMPDIR)             == 0) {
+      /*
+       * Even if getenv() is not disabled, we don't want to return
+       * anything for this if the program may be running setuid,
+       * as it could allow reading/writing of arbitrary files.
+       */
+      if (issetugid())
+         return NULL;
+      else
+         return getenv(name);
+   }
+
+#if HAVE_CONFENV_DISABLE
+   /*
+    * If the name is safe, get it regardless of confenv being disabled.
+    */
+   for (i = 0; i < ELEMENTS(safenames); ++i)
+      if (strcmp(name, safenames[i]) == 0) {
+         p = getenv(name);
+         break;
+      }
+
+#else /* !HAVE_CONFENV_DISABLE */
+   p = getenv(name);
+#endif /* !HAVE_CONFENV_DISABLE */
+
+#else /* !SOCKS_CLIENT */
+   p = getenv(name);
+#endif /* !SOCKS_CLIENT */
+
+   if (p == NULL || value == dontcare) {
+      /*
+       * Some variables have a default based on configure/define.
+       */
+      if (strcmp(name, ENV_SOCKS_DIRECTROUTE_FALLBACK) == 0)
+         p = (SOCKS_DIRECTROUTE_FALLBACK ? "yes" : "no");
+      else
+         return p;
+   }
+
+   switch (value) {
+      case istrue:
+         if (strcasecmp(p, "yes")  == 0
+         ||  strcasecmp(p, "true") == 0
+         ||  strcasecmp(p, "1")    == 0)
+            return p;
+         return NULL;
+
+      case isfalse:
+         if (strcasecmp(p, "no")    == 0
+         ||  strcasecmp(p, "false") == 0
+         ||  strcasecmp(p, "0")     == 0)
+            return p;
+         return NULL;
+
+      default:
+         SERRX(value);
+   }
+
+   /* NOTREACHED */
 }

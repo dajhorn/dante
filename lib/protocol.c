@@ -1,5 +1,6 @@
 /*
- * Copyright (c) 1997, 1998, 1999, 2000, 2001, 2002, 2003
+ * Copyright (c) 1997, 1998, 1999, 2000, 2001, 2008, 2009, 2010, 2011, 2012,
+ *               2013
  *      Inferno Nettverk A/S, Norway.  All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
@@ -44,137 +45,258 @@
 #include "common.h"
 
 static const char rcsid[] =
-"$Id: protocol.c,v 1.55 2003/07/01 13:21:31 michaels Exp $";
+"$Id: protocol.c,v 1.88 2013/10/27 15:24:42 karls Exp $";
 
 unsigned char *
 sockshost2mem(host, mem, version)
-	const struct sockshost_t *host;
-	unsigned char *mem;
-	int version;
+   const sockshost_t *host;
+   unsigned char *mem;
+   int version;
 {
 
-	switch (version) {
-		case SOCKS_V4:
-		case SOCKS_V4REPLY_VERSION:
-			SASSERTX(host->atype == SOCKS_ADDR_IPV4);
+   switch (version) {
+      case PROXY_SOCKS_V4:
+      case PROXY_SOCKS_V4REPLY_VERSION:
+         SASSERTX(host->atype == SOCKS_ADDR_IPV4);
 
-			/* DSTPORT */
-			memcpy(mem, &host->port, sizeof(host->port));
-			mem += sizeof(host->port);
+         /* DSTPORT */
+         memcpy(mem, &host->port, sizeof(host->port));
+         mem += sizeof(host->port);
 
-			/* DSTIP */
-			memcpy(mem, &host->addr.ipv4, sizeof(host->addr.ipv4));
-			mem += sizeof(host->addr.ipv4);
+         /* DSTIP */
+         memcpy(mem, &host->addr.ipv4, sizeof(host->addr.ipv4));
+         mem += sizeof(host->addr.ipv4);
 
-			break;
+         break;
 
-		case SOCKS_V5:
-			/* ATYP */
-			memcpy(mem, &host->atype, sizeof(host->atype));
-			mem += sizeof(host->atype);
+      case PROXY_SOCKS_V5:
+         /* ATYP */
+         memcpy(mem, &host->atype, sizeof(host->atype));
+         mem += sizeof(host->atype);
 
-			switch (host->atype) {
-				case SOCKS_ADDR_IPV4:
-					memcpy(mem, &host->addr.ipv4.s_addr,
-					sizeof(host->addr.ipv4.s_addr));
-					mem += sizeof(host->addr.ipv4.s_addr);
-					break;
+         switch (host->atype) {
+            case SOCKS_ADDR_IPV4:
+               memcpy(mem, &host->addr.ipv4.s_addr,
+               sizeof(host->addr.ipv4.s_addr));
+               mem += sizeof(host->addr.ipv4.s_addr);
+               break;
 
-				case SOCKS_ADDR_IPV6:
-					memcpy(mem, &host->addr.ipv6, sizeof(host->addr.ipv6));
-					mem += sizeof(host->addr.ipv6);
-					break;
+            case SOCKS_ADDR_IPV6:
+               memcpy(mem, &host->addr.ipv6.ip, sizeof(host->addr.ipv6.ip));
+               mem += sizeof(host->addr.ipv6.ip);
+               break;
 
-				case SOCKS_ADDR_DOMAIN:
-					/* first byte gives length of rest. */
-					*mem = (unsigned char)strlen(host->addr.domain);
-					memcpy(mem + 1, host->addr.domain, (size_t)*mem);
-					mem += *mem + 1;
-					break;
+            case SOCKS_ADDR_DOMAIN:
+               /* first byte gives length of rest. */
+               *mem = (unsigned char)strlen(host->addr.domain);
 
-				default:
-					SERRX(host->atype);
-			}
+               memcpy(mem + 1, host->addr.domain, (size_t)*mem);
+               mem += *mem + 1;
+               break;
 
-			/* DST.PORT */
-			memcpy(mem, &host->port, sizeof(host->port));
-			mem += sizeof(host->port);
+            default:
+               SERRX(host->atype);
+         }
 
-			break;
+         /* DST.PORT */
+         memcpy(mem, &host->port, sizeof(host->port));
+         mem += sizeof(host->port);
 
-		default:
-			SERRX(version);
-	}
+         break;
 
-	return mem;
+      default:
+         SERRX(version);
+   }
+
+   return mem;
 }
 
 const unsigned char *
 mem2sockshost(host, mem, len, version)
-	struct sockshost_t *host;
-	const unsigned char *mem;
-	size_t len;
-	int version;
+   sockshost_t *host;
+   const unsigned char *mem;
+   size_t len;
+   int version;
 {
-	const char *function = "mem2sockshost()";
+   const char *function = "mem2sockshost()";
 
-	switch (version) {
-		case SOCKS_V5:
-			if (len < sizeof(host->atype))
-				return NULL;
-			memcpy(&host->atype, mem, sizeof(host->atype));
-			mem += sizeof(host->atype);
-			len -= sizeof(host->atype);
+   switch (version) {
+      case PROXY_SOCKS_V5:
+         if (len < MINSOCKSHOSTLEN)
+            return NULL;
 
-			switch (host->atype) {
-				case SOCKS_ADDR_IPV4:
-					if (len < sizeof(host->addr.ipv4))
-						return NULL;
-					memcpy(&host->addr.ipv4, mem, sizeof(host->addr.ipv4));
-					mem += sizeof(host->addr.ipv4);
-					len -= sizeof(host->addr.ipv4);
-					break;
+         if (len < sizeof(host->atype))
+            return NULL;
 
-				case SOCKS_ADDR_DOMAIN: {
-					size_t domainlen = (size_t)*mem;
+         memcpy(&host->atype, mem, sizeof(host->atype));
+         mem += sizeof(host->atype);
+         len -= sizeof(host->atype);
 
-					mem += sizeof(*mem);
+         switch (host->atype) {
+            case SOCKS_ADDR_IPV4:
+               if (len < sizeof(host->addr.ipv4))
+                  return NULL;
 
-					OCTETIFY(domainlen);
+               memcpy(&host->addr.ipv4, mem, sizeof(host->addr.ipv4));
+               mem += sizeof(host->addr.ipv4);
+               len -= sizeof(host->addr.ipv4);
+               break;
 
-					if (len < domainlen + 1) /* +1 for NUL to be added. */
-						return NULL;
+            case SOCKS_ADDR_DOMAIN: {
+               size_t domainlen = (size_t)*mem;
 
-					SASSERTX(domainlen < sizeof(host->addr.domain));
+               mem += sizeof(*mem);
 
-					memcpy(host->addr.domain, mem, domainlen);
-					host->addr.domain[domainlen] = NUL;
-					mem += domainlen;
-					len -= domainlen + 1; /* +1 for added NUL. */
-					break;
-				}
+               OCTETIFY(domainlen);
 
-				case SOCKS_ADDR_IPV6:
-					slog(LOG_INFO, "%s: IPv6 not supported", function);
-					return NULL;
+               if (len < domainlen + 1) /* +1 for NUL to be added. */
+                  return NULL;
 
-				default:
-					slog(LOG_INFO, "%s: unknown atype field: %d",
-					function, host->atype);
-					return NULL;
-			}
+               SASSERTX(domainlen < sizeof(host->addr.domain));
 
-			if (len < sizeof(host->port))
-				return NULL;
-			memcpy(&host->port, mem, sizeof(host->port));
-			mem += sizeof(host->port);
-			len -= sizeof(host->port);
+               memcpy(host->addr.domain, mem, domainlen);
+               host->addr.domain[domainlen] = NUL;
+               mem += domainlen;
+               len -= domainlen + 1; /* +1 for added NUL. */
+               break;
+            }
 
-			break;
+            case SOCKS_ADDR_IPV6:
+               if (len < sizeof(host->addr.ipv6.ip))
+                  return NULL;
 
-		default:
-			SERRX(version);
-	}
+               memcpy(&host->addr.ipv6.ip, mem, sizeof(host->addr.ipv6.ip));
+               mem += sizeof(host->addr.ipv6.ip);
+               len -= sizeof(host->addr.ipv6.ip);
 
-	return mem;
+               host->addr.ipv6.scopeid = 0;
+
+               break;
+
+            default:
+               slog(LOG_NEGOTIATE, "%s: unknown atype value: %d",
+                    function, host->atype);
+               return NULL;
+         }
+
+         if (len < sizeof(host->port))
+            return NULL;
+
+         memcpy(&host->port, mem, sizeof(host->port));
+         mem += sizeof(host->port);
+         len -= sizeof(host->port);
+
+         break;
+
+      default:
+         SERRX(version);
+   }
+
+   return mem;
+}
+
+void
+socks_set_responsevalue(response, value)
+    response_t *response;
+    unsigned int value;
+{
+
+    switch (response->version) {
+      case PROXY_SOCKS_V4REPLY_VERSION:
+      case PROXY_SOCKS_V5:
+         response->reply.socks = (unsigned char)value;
+         break;
+
+      case PROXY_UPNP:
+         response->reply.upnp = (unsigned char)value;
+         break;
+
+      case PROXY_HTTP_10:
+      case PROXY_HTTP_11:
+         response->reply.http = (unsigned short)value;
+         break;
+
+      default:
+         SERRX(response->version);
+   }
+}
+
+unsigned int
+socks_get_responsevalue(response)
+    const response_t *response;
+{
+
+    switch (response->version) {
+      case PROXY_SOCKS_V4REPLY_VERSION:
+      case PROXY_SOCKS_V5:
+         return response->reply.socks;
+
+      case PROXY_UPNP:
+         return response->reply.upnp;
+
+      case PROXY_HTTP_10:
+      case PROXY_HTTP_11:
+         return response->reply.http;
+
+      default:
+         SERRX(response->version);
+   }
+
+   /* NOTREACHED */
+}
+
+int
+proxyprotocolisknown(version)
+   const int version;
+{
+
+   switch (version) {
+      /* don't include PROXY_SOCKS_V4REPLY_VERSION.  Stupid thing set to 0. */
+      case PROXY_SOCKS_V4:
+      case PROXY_SOCKS_V5:
+      case PROXY_UPNP:
+      case PROXY_HTTP_10:
+      case PROXY_HTTP_11:
+         return 1;
+
+      default:
+         return 0;
+   }
+}
+
+int
+authmethodisknown(method)
+   const int method;
+{
+
+   switch (method) {
+      case AUTHMETHOD_NOTSET:
+      case AUTHMETHOD_NONE:
+      case AUTHMETHOD_GSSAPI:
+      case AUTHMETHOD_UNAME:
+      case AUTHMETHOD_NOACCEPT:
+      case AUTHMETHOD_RFC931:
+      case AUTHMETHOD_PAM_ANY:
+      case AUTHMETHOD_PAM_ADDRESS:
+      case AUTHMETHOD_PAM_USERNAME:
+      case AUTHMETHOD_BSDAUTH:
+         return 1;
+
+      default:
+         return 0;
+   }
+}
+
+int *
+charmethod2intmethod(methodc, charmethodv, intmethodv)
+   const size_t methodc;
+   const unsigned char charmethodv[];
+   int intmethodv[];
+{
+   size_t i;
+
+   for (i = 0; i < methodc; ++i)
+      intmethodv[i] = (int)charmethodv[i];
+
+   return intmethodv;
 }

@@ -1,15 +1,15 @@
-/* $Id: daemon.c,v 1.3 1999/05/13 16:35:55 karls Exp $ */
+/* $Id: daemon.c,v 1.9 2012/10/22 15:15:58 karls Exp $ */
 
 #ifdef HAVE_CONFIG_H
 #include "autoconf.h"
-#endif  /* HAVE_CONFIG_H */
+#endif /* HAVE_CONFIG_H */
 
-#include "common.h"
+#include "osdep.h"
 
-#if !HAVE_DAEMON
+/*      $OpenBSD: daemon.c,v 1.6 2005/08/08 08:05:33 espie Exp $ */
 /*-
  * Copyright (c) 1990, 1993
- *	The Regents of the University of California.  All rights reserved.
+ *      The Regents of the University of California.  All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
  * modification, are permitted provided that the following conditions
@@ -19,11 +19,7 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *	This product includes software developed by the University of
- *	California, Berkeley and its contributors.
- * 4. Neither the name of the University nor the names of its contributors
+ * 3. Neither the name of the University nor the names of its contributors
  *    may be used to endorse or promote products derived from this software
  *    without specific prior written permission.
  *
@@ -40,51 +36,32 @@
  * SUCH DAMAGE.
  */
 
-#if defined(LIBC_SCCS) && !defined(lint)
-static char rcsid[] = "$OpenBSD: daemon.c,v 1.2 1996/08/19 08:22:13 tholo Exp $";
-#endif /* LIBC_SCCS and not lint */
-
-#include <fcntl.h>
-/*#include <paths.h>*/
-#if HAVE_UNISTD_H
-#include <unistd.h>
-#endif  /* HAVE_UNISTD_H */
-
 int
-daemon(nochdir, noclose)
-	int nochdir, noclose;
+daemon(int nochdir, int noclose)
 {
-	int fd;
+        int fd;
 
-	switch (fork()) {
-	case -1:
-		return (-1);
-	case 0:
-		break;
-	default:
-		_exit(0);
-	}
+        switch (fork()) {
+		case -1:
+                return (-1);
+		case 0:
+                break;
+		default:
+                _exit(0);
+        }
 
-	if (setsid() == -1)
-		return (-1);
+        if (setsid() == -1)
+                return (-1);
 
-	if (!nochdir)
-		(void)chdir("/");
+        if (!nochdir)
+                (void)chdir("/");
 
-	/*XXX /dev/null */
-	if (!noclose && (fd = open("/dev/null", O_RDWR, 0)) != -1) {
-		(void)dup2(fd, STDIN_FILENO);
-		(void)dup2(fd, STDOUT_FILENO);
-		(void)dup2(fd, STDERR_FILENO);
-		if (fd > 2)
-			(void)close (fd);
-	}
-	return (0);
+        if (!noclose && (fd = open("/dev/null", O_RDWR, 0)) != -1) {
+                (void)dup2(fd, STDIN_FILENO);
+                (void)dup2(fd, STDOUT_FILENO);
+                (void)dup2(fd, STDERR_FILENO);
+                if (fd > 2)
+                        (void)close (fd);
+        }
+        return (0);
 }
-#else
-static void avoid_error __P((void));
-static void avoid_error()
-{
-	avoid_error();
-}
-#endif  /* !HAVE_DAEMON */

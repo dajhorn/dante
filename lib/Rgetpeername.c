@@ -1,5 +1,6 @@
 /*
- * Copyright (c) 1997, 1998, 1999, 2000, 2001, 2002, 2003, 2004
+ * Copyright (c) 1997, 1998, 1999, 2000, 2001, 2004, 2008, 2009, 2010, 2011,
+ *               2012, 2013
  *      Inferno Nettverk A/S, Norway.  All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
@@ -44,58 +45,56 @@
 #include "common.h"
 
 static const char rcsid[] =
-"$Id: Rgetpeername.c,v 1.34 2005/01/24 10:24:21 karls Exp $";
+"$Id: Rgetpeername.c,v 1.58 2013/10/27 15:24:42 karls Exp $";
 
 int
 Rgetpeername(s, name, namelen)
-	int s;
-	struct sockaddr *name;
-	socklen_t *namelen;
+   int s;
+   struct sockaddr *name;
+   socklen_t *namelen;
 {
-	const char *function = "Rgetpeername()";
-	struct socksfd_t *socksfd;
-	struct sockaddr *addr;
+   const char *function = "Rgetpeername()";
+   socksfd_t socksfd;
+   struct sockaddr_storage addr;
 
-	clientinit();
+   clientinit();
 
-	slog(LOG_DEBUG, "%s", function);
+   slog(LOG_DEBUG, "%s, fd %d", function, s);
 
-	if (!socks_addrisok((unsigned int)s)) {
-		socks_rmaddr((unsigned int)s);
-		return getpeername(s, name, namelen);
-	}
+   if (!socks_addrisours(s, &socksfd, 1)) {
+      socks_rmaddr(s, 1);
+      return getpeername(s, name, namelen);
+   }
 
-	socksfd = socks_getaddr((unsigned int)s);
-	SASSERTX(socksfd != NULL);
+   switch (socksfd.state.command) {
+      case SOCKS_BIND:
+         fakesockshost2sockaddr(&socksfd.forus.accepted, &addr);
+         break;
 
-	switch (socksfd->state.command) {
-		case SOCKS_BIND:
-			addr = &socksfd->forus.accepted;
-			break;
+      case SOCKS_CONNECT:
+         if (socksfd.state.err != 0) {
+            errno = ENOTCONN;
+            return -1;
+         }
 
-		case SOCKS_CONNECT:
-			if (socksfd->state.err != 0) {
-				errno = ENOTCONN;
-				return -1;
-			}
-			addr = &socksfd->forus.connected;
-			break;
+         fakesockshost2sockaddr(&socksfd.forus.connected, &addr);
+         break;
 
-		case SOCKS_UDPASSOCIATE:
-			if (!socksfd->state.udpconnect) {
-				errno = ENOTCONN;
-				return -1;
-			}
-			addr = &socksfd->forus.connected;
-			break;
+      case SOCKS_UDPASSOCIATE:
+         if (!socksfd.state.udpconnect) {
+            errno = ENOTCONN;
+            return -1;
+         }
 
-		default:
-			SERRX(socksfd->state.command);
-	}
+         fakesockshost2sockaddr(&socksfd.forus.connected, &addr);
+         break;
 
+      default:
+         SERRX(socksfd.state.command);
+   }
 
-	*namelen = MIN(*namelen, (socklen_t)sizeof(*addr));
-	memcpy(name, addr, (size_t)*namelen);
+   *namelen = MIN(*namelen, salen(addr.ss_family));
+   sockaddrcpy(TOSS(name), &addr, (size_t)*namelen);
 
-	return 0;
+   return 0;
 }

@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 1997, 1998, 1999, 2000, 2001, 2002, 2003
+ * Copyright (c) 1997, 1998, 1999, 2001, 2008, 2009, 2012, 2013
  *      Inferno Nettverk A/S, Norway.  All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
@@ -44,37 +44,62 @@
 #include "common.h"
 
 static const char rcsid[] =
-"$Id: Rbindresvport.c,v 1.22 2003/07/01 13:21:22 michaels Exp $";
+"$Id: Rbindresvport.c,v 1.47 2013/10/27 15:24:42 karls Exp $";
 
 /*
- * Note that for this function to work correctly the remote socksserver
+ * Note that for this function to work correctly the remote socks server
  * would have to be using the bind extension.
  */
 
 int
-Rbindresvport(sd, sin)
-	int sd;
-	struct sockaddr_in *sin;
-
+Rbindresvport(s, _sin)
+   int s;
+   struct sockaddr_in *_sin;
 {
-	const char *function = "Rbindresvport()";
-	struct sockaddr name;
-	socklen_t namelen;
+   const char *function = "Rbindresvport()";
+   struct sockaddr_storage sin;
+   socklen_t sinlen;
+   int rc;
 
-	clientinit();
+   clientinit();
 
-	slog(LOG_DEBUG, "%s", function);
+   slog(LOG_DEBUG, "%s, fd %d", function, s);
 
-	if (bindresvport(sd, sin) != 0)
-		return -1;
+   /*
+    * Nothing can be called before Rbindresvport(), delete any old cruft.
+    */
+   socks_rmaddr(s, 1);
 
-	namelen = sizeof(name);
-	if (getsockname(sd, &name, &namelen) != 0)
-		return -1;
+   if (_sin == NULL) {
+      slog(LOG_DEBUG, "%s: fd %d, _sin = %p", function, s, _sin);
+      return bindresvport(s, _sin);
+   }
 
-	/*
-	 * Rbind() will accept failure at binding socket that is already bound
-	 * and will try a remote serverbinding too if appropriate.
-	 */
-	return Rbind(sd, &name, namelen);
+   usrsockaddrcpy(&sin, TOSS(_sin), sizeof(*_sin));
+   if (bindresvport(s, TOIN(&sin)) != 0) {
+      slog(LOG_DEBUG, "%s: bindresvport(%d, %s) failed: %s",
+           function,
+           s,
+           sockaddr2string(&sin, NULL, 0),
+           strerror(errno));
+
+      return -1;
+   }
+
+
+   sinlen = salen(sin.ss_family);
+   if (getsockname(s, TOSA(&sin), &sinlen) != 0)
+      return -1;
+
+   /*
+    * Rbind() will accept failure at binding socket that is already bound
+    * (assuming it has been bound already in some way) and will continue to
+    * try a remote server binding too if appropriate.
+    */
+   if ((rc = Rbind(s, TOSA(&sin), sinlen)) == -1)
+      return -1;
+
+   sockaddrcpy(TOSS(_sin), &sin, salen(sin.ss_family));
+
+   return rc;
 }

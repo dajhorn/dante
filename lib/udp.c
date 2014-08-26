@@ -1,5 +1,6 @@
 /*
- * Copyright (c) 1997, 1998, 1999, 2000, 2001, 2002, 2003, 2004
+ * Copyright (c) 1997, 1998, 1999, 2000, 2001, 2004, 2005, 2008, 2009, 2010,
+ *               2011, 2012, 2013
  *      Inferno Nettverk A/S, Norway.  All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
@@ -44,422 +45,1002 @@
 #include "common.h"
 
 static const char rcsid[] =
-"$Id: udp.c,v 1.132 2005/10/11 13:17:13 michaels Exp $";
+"$Id: udp.c,v 1.289 2013/10/27 15:17:06 karls Exp $";
 
 /* ARGSUSED */
 ssize_t
-Rsendto(s, msg, len, flags, to, tolen)
-	int s;
-	const void *msg;
-	size_t len;
-	int flags;
-	const struct sockaddr *to;
-	socklen_t tolen;
+Rsendto(s, msg, len, flags, _to, tolen)
+   int s;
+   const void *msg;
+   size_t len;
+   int flags;
+   const struct sockaddr *_to;
+   socklen_t tolen;
 {
-	const char *function = "Rsendto()";
-	struct socksfd_t *socksfd;
-	struct sockshost_t host;
-	char srcstring[MAXSOCKADDRSTRING], dststring[sizeof(srcstring)];
-	char *nmsg;
-	size_t nlen;
-	ssize_t n;
+   const char *function = "Rsendto()";
+   socksfd_t socksfd;
+   sockshost_t tohost;
+   struct sockaddr_storage tomem, *to;
+   size_t nlen;
+   socklen_t typelen;
+   ssize_t n;
+   char srcstr[MAXSOCKADDRSTRING], dststr[sizeof(srcstr)], nmsg[SOCKD_BUFSIZE];
+   int type;
 
-	clientinit();
+   clientinit();
 
-	if (to != NULL && to->sa_family != AF_INET) {
-		slog(LOG_DEBUG,
-		"%s: unsupported address family '%d', fallback to system sendto()",
-		function, to->sa_family);
-		return sendto(s, msg, len, flags, to, tolen);
-	}
+   if (_to == NULL)
+      to = NULL;
+   else {
+      to = &tomem;
+      usrsockaddrcpy(to, TOCSS(_to), salen(_to->sa_family));
+   }
 
-	if (udpsetup(s, to, SOCKS_SEND) != 0)
-		return errno == 0 ? sendto(s, msg, len, flags, to, tolen) : -1;
+   slog(LOG_DEBUG, "%s: fd %d, len %lu, address %s",
+        function,
+        s,
+        (long unsigned)len,
+        to == NULL ? "NULL" : sockaddr2string(to, NULL, 0));
 
-	socksfd = socks_getaddr((unsigned int)s);
-	SASSERTX(socksfd != NULL);
+   if (to != NULL && to->ss_family != AF_INET) {
+      slog(LOG_DEBUG, "%s: unsupported address family '%d', system fallback",
+           function, to->ss_family);
 
-	if (to == NULL)
-		if (socksfd->state.udpconnect)
-			to = &socksfd->forus.connected;
-		else { /* tcp. */
-			n =  sendto(s, msg, len, flags, NULL, 0);
+      return sendto(s, msg, len, flags, TOCSA(to), tolen);
+   }
 
-			slog(LOG_DEBUG, "%s: %s: %s -> %s (%lu)",
-			function, protocol2string(SOCKS_TCP),
-			sockaddr2string(&socksfd->local, dststring, sizeof(dststring)),
-			sockaddr2string(&socksfd->server, srcstring, sizeof(srcstring)),
-			(unsigned long)n);
+   typelen = sizeof(type);
+   if (getsockopt(s, SOL_SOCKET, SO_TYPE, &type, &typelen) != 0) {
+      swarn("%s: getsockopt(SO_TYPE)", function);
+      return -1;
+   }
 
-			return n;
-		}
+   if (type != SOCK_DGRAM && type != SOCK_STREAM) {
+      n = sendto(s, msg, len, flags, TOCSA(to), tolen);
 
-	/* prefix a UDP header to the msg */
-	nlen = len;
-	/* LINTED warning: cast discards 'const' from pointer target type */
-	if ((nmsg = udpheader_add(fakesockaddr2sockshost(to, &host),
-	(const char *)msg, &nlen, 0)) == NULL) {
-		errno = ENOBUFS;
-		return -1;
-	}
+      slog(LOG_DEBUG,
+           "%s: fd %d is neither SOCK_STREAM nor SOCK_DGRAM.  "
+           "Direct systemcall returned %ld",
+           function, s, (long)n);
 
-	n = sendto(s, nmsg, nlen, flags,
-	socksfd->state.udpconnect ? NULL : &socksfd->reply,
-	socksfd->state.udpconnect ? 0		: sizeof(socksfd->reply));
-	n -= nlen - len;
+      return n;
+   }
 
-	free(nmsg);
+   if (type == SOCK_DGRAM) {
+      char emsg[256];
 
-	slog(LOG_DEBUG, "%s: %s: %s -> %s (%lu)",
-	function, protocol2string(SOCKS_TCP),
-	sockaddr2string(&socksfd->local, dststring, sizeof(dststring)),
-	sockaddr2string(&socksfd->reply, srcstring, sizeof(srcstring)),
-	(unsigned long)n);
+      socksfd.route = udpsetup(s, to, SOCKS_SEND, 0, emsg, sizeof(emsg));
+      if (socksfd.route == NULL) {
+         if (to == NULL) {
+            /*
+             * Since the caller has managed to connect the socket by himself,
+             * assume it's a socket we should not proxy.
+             */
+            n = sendto(s, msg, len, flags, TOCSA(to), tolen);
 
-	return MAX(-1, n);
+            slog(LOG_DEBUG,
+                 "%s: no route returned by udpsetup() for fd %d, and to is "
+                 "NULL.  Direct fallback to sendto(2) returned %ld (%s)",
+                 function, s, (long)n, strerror(errno));
+
+            return n;
+
+         }
+         else {
+            slog(LOG_DEBUG,
+                  "%s: no route by udpsetup() for fd %d to %s (%s).  "
+                  "Returning -1",
+                  function, s, sockaddr2string(to, NULL, 0), emsg);
+
+            errno = ENETUNREACH;
+            return -1;
+         }
+      }
+      else {
+         slog(LOG_DEBUG,
+              "%s: route returned by udpsetup() for fd %d is a %s route",
+              function,
+              s,
+              proxyprotocols2string(&socksfd.route->gw.state.proxyprotocol,
+                                    NULL,
+                                    0));
+
+         if (socksfd.route->gw.state.proxyprotocol.direct)
+            return sendto(s, msg, len, flags, TOSA(to), tolen);
+
+         if (!socks_addrisours(s, &socksfd, 1))
+            SERRX(s);
+      }
+   }
+
+   if (!socks_addrisours(s, &socksfd, 1)) {
+      slog(LOG_DEBUG, "%s: unknown fd %d, going direct", function, s);
+
+      return sendto(s, msg, len, flags, TOSA(to), tolen);
+   }
+
+   if (socksfd.state.err != 0) {
+      slog(LOG_DEBUG, "%s: session on fd %d already failed with errno %d",
+           function, s, socksfd.state.err);
+
+      errno = socksfd.state.err;
+      return -1;
+   }
+
+   if (socksfd.state.issyscall
+   ||  socksfd.state.version == PROXY_DIRECT
+   ||  socksfd.state.version == PROXY_UPNP) {
+      n = sendto(s, msg, len, flags, TOSA(to), tolen);
+
+      slog(LOG_DEBUG, "%s: sendto(2) to %s on fd %d returned %ld (%s)",
+           function,
+           to == NULL ?
+               "NULL" : sockaddr2string(to, NULL, 0),
+           s,
+           (long)n,
+           strerror(errno));
+
+      return n;
+   }
+
+   if (to == NULL) {
+      if (socksfd.state.udpconnect) {
+         SASSERTX(type == SOCK_DGRAM);
+         tohost = socksfd.forus.connected;
+      }
+      else {
+         SASSERTX(type == SOCK_STREAM);
+
+         if (socksfd.state.inprogress) {
+            SASSERTX(socksfd.state.command == SOCKS_CONNECT);
+
+            slog(LOG_INFO,
+                 "%s: write attempted on connect still in progress: fd %d",
+                 function, s);
+
+            /*
+             * Either the user is 1) using this system call to figure out
+             * whether the connection completed, before continuing with other
+             * things if not, or 2) our attempt to hide our usage of the
+             * user's fd to set up the socks session (without the user getting
+             * any indication that his fd is being written to/read from)
+             * via select(2)/poll(2)/etc. failed.
+             *
+             * In case of 1), the correct thing would be to return ENOTCONN,
+             * but in case 2), we could be called due to the the user having
+             * multiple fd's pointing to the same filedescription index,
+             * meaning that even though we have hidden our usage of "s", the
+             * user is using another fd (s').  Normally we would of course be
+             * called with s' then, but if the user is using e.g. epoll(2),
+             * our dup(2)ing s to temporary dummy-fd does apparently not
+             * change what the fd used by epoll(2) points to.  Not verified,
+             * but one possible explanation for a problem seen would be that
+             * adding a fd to epoll(2), and then dup2(2)'ing that fd to
+             * something else (but with the same fd-index/number) does not
+             * change what the fd used by epoll points to; epoll(2) continues
+             * to use what the fd pointed to before, at least if what it
+             * pointed to before is open.  Is there a way to avoid this
+             * problem?
+             *
+             * So what do we do?  We don't know whether it's 1) or 2)
+             * happening.  If it's 2), returning ENOTCONN can be taken as
+             * an indication that the connect(2) failed, which it has
+             * not (yet, at least) done.  If we return EAGAIN, the
+             * user will hopefully retry again, whenever the systemcall
+             * he used to detect that the fd was readable say it's readable.
+             * If the connect is still in progress, we again assume the
+             * readability was only related to i/o done by our connect-child
+             * over the fd, and was not intended for the user, and again
+             * return EAGAIN.
+             *
+             * If the i/o length attempted is 0, it seems relatively safe
+             * to assume the user just wants to test whether the connect
+             * completed though.
+             */
+
+            if (tolen == 0)
+               errno = ENOTCONN;
+            else
+               errno = EAGAIN;
+
+            return -1;
+         }
+
+         n = socks_sendto(s,
+                          msg,
+                          len,
+                          flags,
+                          NULL,
+                          0,
+                          NULL,
+                          &socksfd.state.auth);
+
+         slog(LOG_DEBUG, "%s: %s: %s: %s -> %s (%ld)",
+              function,
+              proxyprotocol2string(socksfd.state.version),
+              protocol2string(SOCKS_TCP),
+              sockaddr2string(&socksfd.local,
+                              dststr,
+                              sizeof(dststr)),
+              sockaddr2string(&socksfd.server,
+                              srcstr,
+                              sizeof(srcstr)),
+              (long)n);
+
+         /* in case something changed, e.g. gssoverhead. */
+         (void)socks_addaddr(s, &socksfd, 1);
+
+         return n;
+      }
+   }
+   else
+      fakesockaddr2sockshost(to, &tohost);
+
+   SASSERTX(type == SOCK_DGRAM);
+
+   /*
+    * need to prefix a socks udp header to the message.  Copy the original
+    * payload into nmsg, which should have room to prefix the socks
+    * udpheader, and then send it.
+    */
+   memcpy(nmsg, msg, len);
+   nlen = len;
+   if (udpheader_add(&tohost, nmsg, &nlen, sizeof(nmsg)) == NULL)
+      return -1;
+
+   n = socks_sendto(s,
+                    nmsg,
+                    nlen,
+                    flags,
+                    socksfd.state.udpconnect ? NULL : &socksfd.reply,
+                    socksfd.state.udpconnect ?
+                        (socklen_t)0 : salen(socksfd.reply.ss_family),
+                    NULL,
+                    &socksfd.state.auth);
+
+   n -= (ssize_t)(nlen - len);
+
+   slog(LOG_DEBUG,
+        "%s: %s: %s: %s -> %s -> %s (%ld)",
+        function,
+        proxyprotocol2string(socksfd.state.version),
+        protocol2string(SOCKS_UDP),
+        sockaddr2string(&socksfd.local, dststr, sizeof(dststr)),
+        sockaddr2string(&socksfd.reply, srcstr, sizeof(srcstr)),
+        sockshost2string(&tohost, NULL, 0),
+        (long)n);
+
+   /* in case something changed, e.g. gssoverhead. */
+   (void)socks_addaddr(s, &socksfd, 1);
+
+   return MAX(-1, n);
 }
 
 ssize_t
 Rrecvfrom(s, buf, len, flags, from, fromlen)
-	int s;
-	void *buf;
-	size_t len;
-	int flags;
-	struct sockaddr *from;
-	socklen_t *fromlen;
+   int s;
+   void *buf;
+   size_t len;
+   int flags;
+   struct sockaddr *from;
+   socklen_t *fromlen;
 {
-	const char *function = "Rrecvfrom()";
-	struct socksfd_t *socksfd;
-	struct udpheader_t header;
-	struct sockaddr newfrom;
-	char srcstring[MAXSOCKADDRSTRING], dststring[sizeof(srcstring)];
-	socklen_t newfromlen;
-	char *newbuf;
-	size_t newlen;
-	ssize_t n;
+   const char *function = "Rrecvfrom()";
+   socksfd_t socksfd;
+   udpheader_t header;
+   struct sockaddr_storage newfrom;
+   socklen_t typelen, newfromlen;
+   char srcstr[MAXSOCKSHOSTSTRING], dststr[sizeof(srcstr)], *newbuf;
+   size_t payloadoffset, newlen;
+   ssize_t n;
+   int type, isfromproxy;
 
-	if (!socks_addrisok((unsigned int)s)) {
-		socks_rmaddr((unsigned int)s);
-		return recvfrom(s, buf, len, flags, from, fromlen);
-	}
+again:
 
-	if (udpsetup(s, from, SOCKS_RECV) != 0)
-		return errno == 0 ? recvfrom(s, buf, len, flags, from, fromlen) : -1;
+   slog(LOG_DEBUG, "%s: fd %d, len %lu", function, s, (long unsigned)len);
 
-	socksfd = socks_getaddr((unsigned int)s);
-	SASSERTX(socksfd != NULL);
+   typelen = sizeof(type);
+   if (getsockopt(s, SOL_SOCKET, SO_TYPE, &type, &typelen) != 0) {
+      swarn("%s: getsockopt(SO_TYPE)", function);
+      return -1;
+   }
 
-	if (socksfd->state.protocol.tcp) {
-		struct sockaddr *forus;
+   if (type != SOCK_DGRAM && type != SOCK_STREAM) {
+      n = recvfrom(s, buf, len, flags, from, fromlen);
 
-		if (socksfd->state.err != 0) {
-			errno = socksfd->state.err;
-			return -1;
-		}
-		else
-			if (socksfd->state.inprogress) {
-				errno = ENOTCONN;
-				return -1;
-			}
+      slog(LOG_DEBUG,
+           "%s: fd %d is neither SOCK_STREAM nor SOCK_DGRAM.  "
+           "Direct systemcall returned %ld",
+           function, s, (long)n);
 
-		n = recvfrom(s, buf, len, flags, from, fromlen);
+      return n;
+   }
 
-		switch (socksfd->state.command) {
-			case SOCKS_CONNECT:
-				forus = &socksfd->forus.connected;
-				break;
+   if (socks_addrisours(s, &socksfd, 1)) {
+      if (socksfd.state.err != 0) {
+         slog(LOG_DEBUG, "%s: session on fd %d already failed with errno %d",
+              function, s, socksfd.state.err);
 
-			case SOCKS_BIND:
-				forus = &socksfd->forus.accepted;
-				break;
+         errno = socksfd.state.err;
+         return -1;
+      }
 
-			default:
-				SERRX(socksfd->state.command);
-		}
+      if (socksfd.state.issyscall
+      ||  socksfd.state.version == PROXY_DIRECT
+      ||  socksfd.state.version == PROXY_UPNP) {
+         n = recvfrom(s, buf, len, flags, from, fromlen);
 
-		slog(LOG_DEBUG, "%s: %s: %s -> %s (%lu)",
-		function, protocol2string(SOCKS_TCP),
-		sockaddr2string(forus, srcstring, sizeof(srcstring)),
-		sockaddr2string(&socksfd->local, dststring, sizeof(dststring)),
-		(unsigned long)n);
+         slog(LOG_DEBUG, "%s: recvfrom(2) on fd %d returned %ld (%s)",
+              function, s, (long)n, strerror(errno));
 
-		return n;
-	}
+         return n;
+      }
+   }
+   else {
+      socks_rmaddr(s, 1);
 
-	SASSERTX(socksfd->state.protocol.udp);
+      if (type != SOCK_DGRAM) /* nothing we can do with this one. */
+         return recvfrom(s, buf, len, flags, from, fromlen);
 
-	/* udp.  If packet is from socksserver it will be prefixed with a header. */
-	newlen = len + sizeof(header);
-	if ((newbuf = (char *)malloc(sizeof(*newbuf) * newlen)) == NULL) {
-		errno = ENOBUFS;
-		return -1;
-	}
+      bzero(&socksfd, sizeof(socksfd));
+   }
 
-	newfromlen = sizeof(newfrom);
-	if ((n = recvfrom(s, newbuf, newlen, flags, &newfrom, &newfromlen)) == -1) {
-		free(newbuf);
-		return n;
-	}
-	SASSERTX(newfromlen > 0);
+   if (type == SOCK_DGRAM) {
+      char emsg[256];
 
-	if (sockaddrareeq(&newfrom, &socksfd->reply)) {
-		/*
-		 * packet is from socksserver.
-		*/
+      socksfd.route
+      = udpsetup(s, TOSS(from), SOCKS_RECV, 0, emsg, sizeof(emsg));
 
-		if (string2udpheader(newbuf, (size_t)n, &header) == NULL) {
-			char badfrom[MAXSOCKADDRSTRING];
+      if (socksfd.route == NULL) {
+         slog(LOG_DEBUG,
+              "%s: no route found by udpsetup() for fd %d: %s.  Doing direct "
+              "fallback",
+              function, s, emsg);
 
-			swarnx("%s: unrecognized socks udppacket from %s",
-			function, sockaddr2string(&newfrom, badfrom, sizeof(badfrom)));
-			errno = EAGAIN;
-			return -1;	/* don't know if callee wants to retry. */
-		}
+         return recvfrom(s, buf, len, flags, from, fromlen);
+      }
+      else {
+         slog(LOG_DEBUG,
+              "%s: route returned by udpsetup() for fd %d is a %s route",
+              function,
+              s,
+              proxyprotocols2string(&socksfd.route->gw.state.proxyprotocol,
+                                    NULL,
+                                    0));
 
-		/* if connected udpsocket, only forward from "connected" source. */
-		if (socksfd->state.udpconnect) {
-			struct sockshost_t host;
+         if (socksfd.route->gw.state.proxyprotocol.direct)
+            return recvfrom(s, buf, len, flags, from, fromlen);
 
-			if (!sockshostareeq(&header.host,
-			fakesockaddr2sockshost(&socksfd->forus.connected, &host))) {
-				char a[MAXSOCKSHOSTSTRING];
-				char b[MAXSOCKSHOSTSTRING];
+         if (!socks_addrisours(s, &socksfd, 1))
+            SERRX(s);
+      }
 
-				/*
-				 * We have a problem here ...  If we failed to resolve
-				 * address we gave to the socksserver and instead gave a
-				 * hostname to it, sockshostareeq() will fail unless the server
-				 * sends the address it is forwarding from as the sockshost too.
-				 *
-				 * It is better to place safe than sorry though, so
-				 * we have to drop the packet in that case, even if it
-				 * is from the correct source since we can not verify it.
-				 */
+      SASSERTX(socks_addrisours(s, &socksfd, 1));
+   }
 
-				free(newbuf);
 
-				slog(LOG_DEBUG, "%s: expected udpreply from %s, got it from %s",
-				function,
-				sockshost2string(fakesockaddr2sockshost(&socksfd->forus.connected,
-				&host), a, sizeof(a)),
-				sockshost2string(&header.host, b, sizeof(b)));
+   /* XXX split this up into socks_tcp_recvfrom() and socks_udp_recvfrom(). */
 
-				/*
-				 * Not sure what to do now, return error or retry?
-				 * Going with returning error for now.
-				 */
+   if (socksfd.state.protocol.tcp) {
+      const sockshost_t *forus;
 
-#if 0
-				if ((p = fcntl(s, F_GETFL, 0)) == -1)
-					return -1;
+      SASSERTX(type == SOCK_STREAM);
 
-				if (p & NONBLOCKING) {
-#endif
+      if (socksfd.state.inprogress) {
+         SASSERTX(socksfd.state.command == SOCKS_CONNECT);
 
-					errno = EAGAIN;
-					return -1;
+         slog(LOG_INFO,
+              "%s: read attempted on connect still in progress: fd %d",
+              function, s);
 
-#if 0
-				}
-				/* else; assume the best thing is to retry. */
-				return Rrecvfrom(s, buf, len, flags, from, fromlen);
-#endif
-			}
-		}
+         /*
+          * See comment for same case in Rsendto().
+          */
+         if (fromlen == 0)
+            errno = ENOTCONN;
+         else
+            errno = EAGAIN;
 
-		/* replace "newfrom" with the address socksserver says packet is from. */
-		fakesockshost2sockaddr(&header.host, &newfrom);
+         return -1;
+      }
 
-		/* callee doesn't get socksheader. */
-		n -= PACKETSIZE_UDP(&header);
-		SASSERTX(n >= 0);
-		memcpy(buf, &newbuf[PACKETSIZE_UDP(&header)], MIN(len, (size_t)n));
-	}
-	else /* ordinary udppacket, not from socksserver. */
-		memcpy(buf, newbuf, MIN(len, (size_t)n));
+      n = socks_recvfromn(s,
+                          buf,
+                          len,
+                          0,
+                          flags,
+                          TOSS(from),
+                          fromlen,
+                          NULL,
+                          &socksfd.state.auth);
 
-	free(newbuf);
+      switch (socksfd.state.command) {
+         case SOCKS_CONNECT:
+            forus = &socksfd.forus.connected;
+            break;
 
-	slog(LOG_DEBUG, "%s: %s: %s -> %s (%lu)",
-	function, protocol2string(SOCKS_UDP),
-	sockaddr2string(&newfrom, srcstring, sizeof(srcstring)),
-	sockaddr2string(&socksfd->local, dststring, sizeof(dststring)), 
-	(unsigned long)n);
+         case SOCKS_BIND:
+            forus = &socksfd.forus.accepted;
 
-	if (from != NULL) {
-		*fromlen = MIN(*fromlen, newfromlen);
-		memcpy(from, &newfrom, (size_t)*fromlen);
-	}
+            if (forus->atype == SOCKS_ADDR_NOTSET) {
+               slog(LOG_DEBUG, "%s: trying to read from fd %d, which is "
+                               "for bind, but no bind-reply handled yet ...",
+                               function, s);
 
-	return MIN(len, (size_t)n);
+               forus = NULL;
+               n     = -1;
+               errno = ENOTCONN;
+            }
+            break;
+
+         default:
+            SERRX(socksfd.state.command);
+      }
+
+      slog(LOG_DEBUG, "%s: %s: %s: %s -> %s (%ld)",
+           function,
+           proxyprotocol2string(socksfd.state.version),
+           protocol2string(SOCKS_TCP),
+           forus == NULL ?
+               "<NULL>" : sockshost2string(forus, srcstr, sizeof(srcstr)),
+           sockaddr2string(&socksfd.local, dststr, sizeof(dststr)),
+           (long)n);
+
+      /* in case something changed, e.g. gssoverhead. */
+      (void)socks_addaddr(s, &socksfd, 1);
+
+      return n;
+   }
+
+   SASSERTX(socksfd.state.protocol.udp);
+
+   /*
+    * udp.  If packet is from socks server it will be prefixed with a header,
+    * so make sure we have room for it.
+    */
+   newlen = len + sizeof(header);
+   if ((newbuf = malloc(sizeof(*newbuf) * newlen)) == NULL) {
+      errno = ENOBUFS;
+      return -1;
+   }
+
+   newfromlen = sizeof(newfrom);
+   if ((n = socks_recvfrom(s,
+                           newbuf,
+                           newlen,
+                           flags,
+                           &newfrom,
+                           &newfromlen,
+                           NULL,
+                           &socksfd.state.auth)) == -1) {
+      free(newbuf);
+      return n;
+   }
+
+   SASSERTX(newfromlen > 0);
+
+   if (sockaddrareeq(&newfrom, &socksfd.reply, 0)) {
+      isfromproxy = 1;
+
+      if (string2udpheader(newbuf, (size_t)n, &header) == NULL) {
+         swarnx("%s: unrecognized socks udp packet from %s",
+                function, sockaddr2string(&newfrom, NULL, 0));
+
+         free(newbuf);
+
+         errno = EAGAIN;
+         return -1;
+      }
+
+      slog(LOG_DEBUG, "%s: proxy server at %s says udp packet is from %s",
+           function,
+           sockaddr2string(&newfrom, NULL, 0),
+           sockshost2string(&header.host, NULL, 0));
+
+      /* replace "newfrom" with the address socks server says packet is from. */
+      fakesockshost2sockaddr(&header.host, &newfrom);
+
+      /* callee doesn't want socks header. */
+      n -= (ssize_t)HEADERSIZE_UDP(&header);
+      payloadoffset = HEADERSIZE_UDP(&header);
+   }
+   else {
+      isfromproxy = 0;
+
+      slog(LOG_DEBUG, "%s: packet is from %s, not from the proxy server (%s)",
+           function,
+           sockaddr2string(&newfrom, srcstr, sizeof(srcstr)),
+           sockaddr2string(&socksfd.reply, dststr, sizeof(dststr)));
+
+      payloadoffset = 0;
+   }
+
+   SASSERTX(n >= 0);
+
+   if (socksfd.state.udpconnect) {
+      /*
+       * Need to filter out packets that are not from the address the
+       * client connected to.
+       */
+      int dropit = 0;
+
+      if (isfromproxy) {
+         /*
+          * XXX
+          * only supported for ip-addresses at the moment.  Need to decide
+          * how the server should treat hostnames with regards to replies
+          * before hostnames can be supported.
+          */
+         if (socksfd.forus.connected.atype == SOCKS_ADDR_IPV4
+         && !sockshostareeq(&header.host, &socksfd.forus.connected)) {
+            slog(LOG_INFO,
+                 "%s: client connected to address %s via proxy, but proxy "
+                 "says this packet is from %s.  Dropping it",
+                 function,
+                 sockshost2string(&socksfd.forus.connected,
+                                  dststr,
+                                  sizeof(dststr)),
+                 sockshost2string(&header.host, srcstr, sizeof(srcstr)));
+
+            dropit = 1;
+         }
+      }
+      else {
+         slog(LOG_INFO,
+              "%s: client connected to address %s via proxy server at %s, but "
+              "this packet not from the proxy, but from from %s.  Dropping it",
+              function,
+              sockshost2string(&socksfd.forus.connected, NULL, 0),
+              sockaddr2string(&socksfd.reply,
+                              srcstr,
+                              sizeof(srcstr)),
+              sockaddr2string(&newfrom,
+                              dststr,
+                              sizeof(dststr)));
+         dropit = 1;
+      }
+
+      if (dropit) {
+         free(newbuf);
+
+         if (fdisblocking(s)) {
+            slog(LOG_DEBUG,
+                 "%s: fd %d is blocking but we have no packet to return our "
+                 "client.  Going round again",
+                 function, s);
+
+            goto again;
+         }
+
+         errno = EAGAIN;
+         return -1;
+      }
+   }
+
+   memcpy(buf, &newbuf[payloadoffset], MIN(len, (size_t)n));
+   free(newbuf);
+
+   slog(LOG_DEBUG, "%s: %s: %s: %s -> %s%s%s (%ld)",
+        function,
+        proxyprotocol2string(socksfd.state.version),
+        protocol2string(SOCKS_UDP),
+        sockaddr2string(&newfrom, srcstr, sizeof(srcstr)),
+        isfromproxy ?
+            sockaddr2string(&socksfd.reply, NULL, 0) : "",
+        isfromproxy ? " -> " : "",
+        sockaddr2string(&socksfd.local, dststr, sizeof(dststr)),
+        (long)(n));
+
+   if (from != NULL) {
+      *fromlen = MIN(*fromlen, newfromlen);
+      sockaddrcpy(TOSS(from), &newfrom, (size_t)*fromlen);
+   }
+
+   /* in case something changed, e.g. gssoverhead. */
+   (void)socks_addaddr(s, &socksfd, 1);
+
+   return MIN(len, (size_t)n);
 }
 
-
-int
-udpsetup(s, to, type)
-	int s;
-	const struct sockaddr *to;
-	int type;
+route_t *
+udpsetup(s, to, type, shouldconnect, emsg, emsglen)
+   int s;
+   const struct sockaddr_storage *to;
+   int type;
+   int shouldconnect;
+   char *emsg;
+   const size_t emsglen;
 {
-	const char *function = "udpsetup()";
-	struct socks_t packet;
-	struct socksfd_t socksfd;
-	struct sockaddr_in newto;
-	struct sockshost_t src, dst;
-	socklen_t len;
-	int p;
+   const char *function = "udpsetup()";
+   static route_t directroute;
+   socksfd_t socksfd;
+   authmethod_t auth;
+   socks_t packet;
+   sockshost_t src, dst;
+   struct sockaddr_storage addr;
+   socklen_t len;
 
-	slog(LOG_DEBUG, "%s: s = %d", function, s);
+   slog(LOG_DEBUG, "%s: fd %d, type = %s, to = %s, shouldconnect = %d",
+         function,
+         s,
+         type == SOCKS_RECV ? "receive" : "send",
+         (to == NULL || type == SOCKS_RECV) ?
+            "N/A" : sockaddr2string(to, NULL, 0),
+         shouldconnect);
 
-	if (!socks_addrisok((unsigned int)s))
-		socks_rmaddr((unsigned int)s);
+   errno = 0;
 
-	if (socks_getaddr((unsigned int)s) != NULL)
-		return 0; /* all set up. */
+   /*
+    * don't bother setting it fully up, not expecting anybody to access
+    * any other fields if direct is set.
+    */
+   directroute.gw.state.proxyprotocol.direct = 1;
 
-	/*
-	 * if this socket has not previously been used we need to
-	 * make a new connection to the socksserver for it.
-	 */
+   bzero(&socksfd, sizeof(socksfd));
+   len = sizeof(addr);
+   if (getsockname(s, TOSA(&addr), &len) != 0) {
+      snprintf(emsg, emsglen, "getsockname(s) failed: %s", strerror(errno));
+      return NULL;
+   }
+   else
+      slog(LOG_DEBUG, "%s: local address of fd %d is %s",
+           function, s, sockaddr2string(&addr, NULL, 0));
 
-	errno = 0;
-	switch (type) {
-		case SOCKS_RECV:
-			/*
-			 * problematic, trying to receive on socket not sent on.
-			 */
+   switch (TOSA(&addr)->sa_family) {
+      case AF_INET:
+         break;
 
-			bzero(&newto, sizeof(newto));
-			newto.sin_family			= AF_INET;
-			newto.sin_addr.s_addr	= htonl(INADDR_ANY);
-			newto.sin_port				= htons(0);
+      default:
+         snprintf(emsg, emsglen, "unsupported af %d", TOSA(&addr)->sa_family);
+         return NULL;
+   }
 
-			/* LINTED pointer casts may be troublesome */
-			to = (struct sockaddr *)&newto;
+   if (socks_addrisours(s, &socksfd, 1)) {
+      if (socksfd.state.command == SOCKS_UDPASSOCIATE) {
+         slog(LOG_DEBUG, "%s: things already set up for fd %d", function, s);
+         return socksfd.route;
+      }
+      else
+         slog(LOG_DEBUG, "%s: socket was previously used for command %s",
+              function, command2string(socksfd.state.command));
+   }
 
-			break;
+   socks_rmaddr(s, 1);
 
-		case SOCKS_SEND:
-			if (to == NULL)
-				return -1; /* no address and unknown socket, no idea. */
-			break;
+   if (socks_socketisforlan(s)) {
+      slog(LOG_INFO, "%s: fd %d is for lan only", function, s);
+      return &directroute;
+   }
 
-		default:
-			SERRX(type);
-	}
+   bzero(&socksfd, sizeof(socksfd));
+   socksfd.control = -1;
+   socksfd.local   = addr;
 
-	/*
-	 * we need to send the socksserver our address.
-	 * First check if the socket already has a name, if so
-	 * use that, otherwise assign the name ourselves.
-	 */
+   switch (type) {
+      case SOCKS_RECV:
+         /*
+          * Either a socket for which the route has previously been determined
+          * to be direct, in which case we are not bothering to keep track
+          * off the fd, or something more problematic; trying to receive on
+          * socket not sent on.
+          *
+          * Only UPnP supports the latter, and in that case, the socket
+          * should already have been bound, so socks_addrisours()
+          * should have been true.  Nothing we can do in other cases.
+          */
+         snprintf(emsg, emsglen,
+                  "%s: attempted receive on unregistered fd %d", function, s);
 
-	bzero(&socksfd, sizeof(socksfd));
+         return NULL;
 
-	len = sizeof(socksfd.local);
-	if (getsockname(s, &socksfd.local, &len) != 0)
-		return -1;
-	sockaddr2sockshost(&socksfd.local, &src);
+      case SOCKS_SEND:
+         if (to == NULL) {
+            /*
+             * no address and unknown socket.  Has a connect(2) been done
+             * on the socket, but for some reason not been caught by us?
+             */
+            socklen_t addrlen = sizeof(addr);
+            if (getpeername(s, TOSA(&addr), &addrlen) == 0) {
+               int val;
 
-	fakesockaddr2sockshost(to, &dst);
+               len = sizeof(val);
+               if (getsockopt(s, SOL_SOCKET, SO_TYPE, &val, &len) != 0) {
+                  snprintf(emsg, emsglen, "getsockopt(SO_TYPE) failed: %s",
+                           strerror(errno));
 
-	bzero(&packet, sizeof(packet));
-	packet.version				= SOCKS_V5;
-	packet.auth.method		= AUTHMETHOD_NOTSET;
-	packet.req.version		= packet.version;
-	packet.req.command		= SOCKS_UDPASSOCIATE;
-	packet.req.flag			|= SOCKS_USECLIENTPORT;
-/*	packet.req.flag			|= SOCKS_INTERFACEREQUEST; */
-	packet.req.host			= src;
+                  return NULL;
+               }
 
-	if ((socksfd.control = socket(AF_INET, SOCK_STREAM, 0)) == -1)
-		return -1;
+               switch (val) {
+                  case SOCK_DGRAM:
+                     slog(LOG_INFO,
+                          "%s: fd %d is unregistered, but has a datagram peer: "
+                          "%s.  Trying to accommodate ... ",
+                          function,
+                          s,
+                          sockaddr2string(&addr, NULL, 0));
 
-	if ((socksfd.route
-	= socks_connectroute(socksfd.control, &packet, &src, &dst)) == NULL) {
-		close(socksfd.control);
-		return -1;
-	}
+                     break;
 
-	/* LINTED  pointer casts may be troublesome */
-	if ((TOIN((&socksfd.local))->sin_addr.s_addr == htonl(INADDR_ANY))
-	/* LINTED  pointer casts may be troublesome */
-	|| TOIN((&socksfd.local))->sin_port == htons(0)) {
-		/*
-		 * local name not fixed, set it, port may be bound, we need to bind
-		 * IP too however.
-		 */
+                  case SOCK_STREAM:
+                     snprintf(emsg, emsglen,
+                              "fd %d is unregistered, but has a stream peer "
+                              "(%s) already; nothing to do",
+                              s,
+                              sockaddr2string(&addr, NULL, 0));
+                     return NULL;
 
-		/* LINTED  pointer casts may be troublesome */
-		const in_port_t port = TOIN((&socksfd.local))->sin_port;
+                  default:
+                     return &directroute;
+               }
 
-		if (port != htons(0)) {
-			/*
-			 * port is bound.  We will try to unbind and then rebind same port
-			 * but now also bind IP address.  XXX Dangerous stuff.
-			 */
+               to            = &addr;
+               shouldconnect = 1;
+            }
+            else {
+               snprintf(emsg, emsglen, "unknown fd %d and no to-addr", s);
+               return NULL;
+            }
+         }
+         break;
 
-			if ((p = socketoptdup(s)) == -1) {
-				close(socksfd.control);
-				return -1;
-			}
+      default:
+         SERRX(type);
+   }
 
-			if (dup2(p, s) == -1) {
-				close(socksfd.control);
-				close(p);
-				return -1;
-			}
-			close(p);
-		}
+   sockaddr2sockshost(&socksfd.local, &src);
+   fakesockaddr2sockshost(to, &dst);
 
-		/*
-		 * don't have much of an idea on what IP address to use so might as
-		 * well use same as tcp connection to socksserver uses.
-		 */
-		len = sizeof(socksfd.local);
-		if (getsockname(socksfd.control, &socksfd.local, &len) != 0) {
-			close(socksfd.control);
-			return -1;
-		}
-		/* LINTED  pointer casts may be troublesome */
-		TOIN(&socksfd.local)->sin_port = port;
+   bzero(&auth, sizeof(auth));
+   auth.method          = AUTHMETHOD_NOTSET;
 
-		if (bind(s, &socksfd.local, sizeof(socksfd.local)) != 0) {
-			close(socksfd.control);
-			return -1;
-		}
+   bzero(&packet, sizeof(packet));
+   packet.version       = PROXY_DIRECT;;
+   packet.req.version   = packet.version;
+   packet.req.command   = SOCKS_UDPASSOCIATE;
 
-		if (getsockname(s, &socksfd.local, &len) != 0) {
-			close(socksfd.control);
-			return -1;
-		}
+#if 0 /*
+       * some (nec-based) socks-servers misinterpret this to mean something
+       * completely different than what the draft says.
+       */
+   packet.req.flag     |= SOCKS_USECLIENTPORT;
+#endif
 
-		sockaddr2sockshost(&socksfd.local, &packet.req.host);
-	}
+   packet.req.host      = src;
+   packet.req.protocol  = SOCKS_UDP;
+   packet.req.auth      = &auth;
 
-/*	packet.req.host.addr.ipv4.s_addr = htonl(INADDR_ANY); */
-/*	packet.req.host.port = htons(0); */
+   if ((socksfd.route = socks_requestpolish(&packet.req, &src, &dst)) == NULL) {
+      char srcstr[MAXSOCKSHOSTSTRING], dststr[sizeof(srcstr)];
 
-	if (socks_negotiate(s, socksfd.control, &packet, socksfd.route) != 0)
-		return -1;
+      snprintf(emsg, emsglen, "no route from %s to %s found",
+               sockshost2string(&src, srcstr, sizeof(srcstr)),
+               sockshost2string(&dst, dststr, sizeof(dststr)));
 
-	socksfd.state.auth				= packet.auth;
-	socksfd.state.version			= packet.version;
-	socksfd.state.command			= SOCKS_UDPASSOCIATE;
-	socksfd.state.protocol.udp		= 1;
-	sockshost2sockaddr(&packet.res.host, &socksfd.reply);
+      return NULL;
+   }
 
-	len = sizeof(socksfd.server);
-	if (getpeername(socksfd.control, &socksfd.server, &len) != 0) {
-		close(socksfd.control);
-		return -1;
-	}
+   if (socksfd.route->gw.state.proxyprotocol.direct) {
+      slog(LOG_DEBUG, "%s: direct system calls for fd %d", function, s);
 
-	if (socks_addaddr((unsigned int)s, &socksfd) == NULL) {
-		close(socksfd.control);
-		errno = ENOBUFS;
-		return -1;
-	}
+      directroute = *socksfd.route;
+      return &directroute;
+   }
 
-	return 0;
+   /* only ones we support udp via. */
+   switch (packet.version = packet.req.version) {
+      case PROXY_SOCKS_V5:
+      case PROXY_UPNP:
+         if ((socksfd.control = socket(AF_INET, SOCK_STREAM, 0)) == -1) {
+            snprintf(emsg, emsglen,
+                     "failed to create control socket: %s", strerror(errno));
+            return NULL;
+         }
+
+         slog(LOG_DEBUG, "%s: control fd %d created for data fd %d",
+              function, socksfd.control, s);
+         break;
+
+      case PROXY_DIRECT:
+         break;
+
+      default:
+         SERRX(packet.version);
+   }
+
+   if (socks_routesetup(socksfd.control, s, socksfd.route, emsg, emsglen)
+   != 0) {
+      swarnx("%s: socks_routesetup() failed: %s", function, emsg);
+
+      if (socksfd.control != -1)
+         close(socksfd.control);
+
+      return NULL;
+   }
+
+   /*
+    * routesetup may have changed local address due to redirect statement.
+    */
+   len = sizeof(socksfd.local);
+   if (getsockname(s, TOSA(&socksfd.local), &len) != 0) {
+      snprintf(emsg, emsglen, "getsockname(s) failed: %s", strerror(errno));
+      return NULL;
+   }
+
+   slog(LOG_DEBUG, "%s: local address of fd %d (data-fd) is %s",
+        function, s, sockaddr2string(&socksfd.local, NULL, 0));
+
+   sockaddr2sockshost(&socksfd.local, &src);
+
+   if ((socksfd.route = socks_connectroute(socksfd.control,
+                                           &packet,
+                                           &src,
+                                           &dst,
+                                           emsg,
+                                           emsglen)) == NULL) {
+      swarnx("could not connect route: %s", emsg);
+
+      close(socksfd.control);
+      return NULL;
+   }
+
+   /*
+    * we need to send the socks server our address.
+    * First check if the socket already has a name, if so
+    * use that, otherwise assign the name ourselves before informing the
+    * socks server.
+    */
+   if (PORTISBOUND(&socksfd.local))
+      slog(LOG_DEBUG, "%s: fd %d already bound to %s, using that",
+           function, s, sockaddr2string(&socksfd.local, NULL, 0));
+   else {
+      /*
+       * local addr not fixed, so set it so we can tell the socks-server.
+       */
+
+      /*
+       * don't have much of an idea on what IP address to use so
+       * use the same address as the tcp connection to socks server uses.
+       */
+      len = sizeof(socksfd.local);
+      if (getsockname(socksfd.control, TOSA(&socksfd.local), &len) != 0) {
+         snprintf(emsg, emsglen, "getsockname(socksfd.control) failed: %s",
+                  strerror(errno));
+
+         close(socksfd.control);
+         return NULL;
+      }
+      SET_SOCKADDRPORT(&socksfd.local, htons(0));
+
+      if (bind(s, TOSA(&socksfd.local), salen(socksfd.local.ss_family)) != 0) {
+         snprintf(emsg, emsglen, "bind() of fd %d (s) to address %s failed: %s",
+                  s,
+                  sockaddr2string(&socksfd.local, NULL, 0),
+                  strerror(errno));
+
+         close(socksfd.control);
+         return NULL;
+      }
+
+      if (getsockname(s, TOSA(&socksfd.local), &len) != 0) {
+         snprintf(emsg, emsglen, "getsockname() on fd %d (s) failed: %s",
+                  s, strerror(errno));
+
+         close(socksfd.control);
+         return NULL;
+      }
+   }
+
+   sockaddr2sockshost(&socksfd.local, &packet.req.host);
+
+   if (socks_negotiate(s,
+                       socksfd.control,
+                       &packet,
+                       socksfd.route,
+                       emsg,
+                       emsglen) != 0) {
+      close(socksfd.control);
+
+      swarnx("%s: socks_negotiate() failed: %s", function, emsg);
+      return NULL;
+   }
+
+   update_after_negotiate(&packet, &socksfd);
+   socksfd.state.protocol.udp = 1;
+
+   if (socksfd.state.version == PROXY_UPNP)
+      sockshost2sockaddr(&packet.res.host, &socksfd.remote);
+   else {
+      sockshost2sockaddr(&packet.res.host, &socksfd.reply);
+
+      len = sizeof(socksfd.server);
+      if (getpeername(socksfd.control, TOSA(&socksfd.server), &len) != 0) {
+         snprintf(emsg, emsglen,
+                  "getpeername() on fd %d (socksfd.control) failed: %s",
+                  socksfd.control, strerror(errno));
+
+         close(socksfd.control);
+         return NULL;
+      }
+   }
+
+   if (shouldconnect) {
+      char lstr[MAXSOCKADDRSTRING], pstr[sizeof(lstr)];
+      int rc;
+
+      socksfd.state.udpconnect = 1;
+
+      switch (socksfd.state.version) {
+         case PROXY_SOCKS_V5:
+            fakesockaddr2sockshost(to, &socksfd.forus.connected);
+
+            rc = connect(s,
+                         TOSA(&socksfd.reply),
+                         salen(socksfd.reply.ss_family));
+
+            snprintf(emsg, emsglen,
+                     "connecting fd %d from %s to %s-server %s %s: %s",
+                     s,
+                     sockaddr2string(&socksfd.local,
+                                     lstr,
+                                     sizeof(lstr)),
+                     proxyprotocol2string(socksfd.state.version),
+                     sockaddr2string(&socksfd.reply,
+                                     pstr,
+                                     sizeof(pstr)),
+                     rc == 0 ? "succeeded" : "failed",
+                     strerror(errno));
+
+            slog(rc == 0 ? LOG_INFO : LOG_WARNING, "%s: %s", function, emsg);
+
+            if (rc != 0) {
+               close(socksfd.control);
+               return NULL;
+            }
+
+            break;
+
+         case PROXY_UPNP:
+            rc = connect(s, TOCSA(to), salen(to->ss_family));
+            snprintf(emsg, emsglen,
+                     "connecting fd %d from %s to %s %s: %s",
+                     s,
+                     sockaddr2string(&socksfd.local,
+                                     lstr,
+                                     sizeof(lstr)),
+                     sockaddr2string(to, pstr, sizeof(pstr)),
+                     rc == 0 ? "succeeded" : "failed",
+                     strerror(errno));
+
+
+            slog(rc == 0 ? LOG_INFO : LOG_WARNING, "%s: %s", function, emsg);
+
+            if (rc != 0)
+               return NULL;
+
+            break;
+
+         default:
+            SERRX(socksfd.state.version);
+      }
+
+   }
+
+   if (socksfd.state.version == PROXY_UPNP) {
+      /*
+       * is a one-time thing, nothing more expected on the control socket
+       * and no need to keep it open any longer.
+       */
+      close(socksfd.control);
+      socksfd.control = s;
+   }
+
+   if (socks_addaddr(s, &socksfd, 1) == NULL) {
+      snprintf(emsg, emsglen, "socks_addaddr() failed: %s", strerror(errno));
+
+      close(socksfd.control);
+      return NULL;
+   }
+
+   return socksfd.route;
 }

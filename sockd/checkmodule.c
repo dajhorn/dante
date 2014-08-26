@@ -1,7 +1,7 @@
 /*
- * $Id: checkmodule.c,v 1.6 2003/07/01 13:21:53 michaels Exp $
+ * $Id: checkmodule.c,v 1.18 2013/08/28 08:38:41 michaels Exp $
  *
- * Copyright (c) 2001, 2002, 2003
+ * Copyright (c) 2001, 2008, 2009, 2011, 2012
  *      Inferno Nettverk A/S, Norway.  All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
@@ -46,18 +46,28 @@
 #include "common.h"
 
 static const char rcsid[] =
-"$Id: checkmodule.c,v 1.6 2003/07/01 13:21:53 michaels Exp $";
+"$Id: checkmodule.c,v 1.18 2013/08/28 08:38:41 michaels Exp $";
 
 void
 checkmodule(name)
-	const char *name;
+   const char *name;
 {
-	const char *function = "checkmodule()";
-	const char **ipv = NULL;
-	int ipc = 0;
-	int i;
+   const char *function = "checkmodule()";
 
-	slog(LOG_INFO, "%s: checking license for module '%s'", function, name);
-	serrx(EXIT_FAILURE, "%s: license error: module '%s' not installed",
-	function, name);
+   yyerrorx("license error: module \"%s\" is not installed.  "
+            "Please contact Inferno Nettverk for a license or assistance.",
+            name);
+}
+
+char *
+licensekey2string(key)
+   const licensekey_t *key;
+{
+   const char *function = "checkmodule()";
+
+   yyerrorx("something appears to be wrong with licensed module installation.  "
+            "Please contact Inferno Nettverk A/S for assistance.");
+
+   /* NOTREACHED */
+   return NULL;
 }

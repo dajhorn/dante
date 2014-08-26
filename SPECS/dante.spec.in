@@ -1,109 +1,149 @@
-Summary: A free Socks v4/v5 client implementation
+Summary: A free SOCKS v4/v5 client implementation
 Name: dante
-%define version @VERSION@
+%define fullversion @VERSION@
 %define prefix /usr
-Version: %{version}
-Release: 1
-Copyright: BSD-type
+Prefix: %{prefix}
+Version: @RPMVERSION1@
+Release: @RPMVERSION2@%{?dist}
+License: BSD-type
 Group: Networking/Utilities
 URL: http://www.inet.no/dante/
 Vendor: Inferno Nettverk A/S
-Source: ftp://ftp.inet.no/pub/socks/dante-%{version}.tar.gz
-Buildroot: %{_tmppath}/dante-root
+Source: ftp://ftp.inet.no/pub/socks/dante-%{fullversion}.tar.gz
+Buildroot: %{_tmppath}/%{name}-%{version}-%{release}-root
 
-%if %{?rh62:1}%{!?rh62:0}
-BuildRequires: pam
-%else
 BuildRequires: pam-devel
-%endif
+BuildRequires: bison
+BuildRequires: flex
 
 %description
-Dante is a free implementation of the proxy protocols socks version 4,
-socks version 5 (rfc1928) and msproxy. It can be used as a firewall
-between networks. It is being developed by Inferno Nettverk A/S, a
-Norwegian consulting company. Commercial support is available.
+Dante is a free implementation of the SOCKS proxy protocol, version 4,
+and version 5 (rfc1928). It can be used as a firewall between
+networks. It is being developed by Inferno Nettverk A/S, a Norwegian
+consulting company. Commercial support is available.
 
 This package contains the dynamic libraries required to "socksify"
-existing applications to become socks clients.
+existing applications, allowing them to automatically use the SOCKS
+protocol.
 
 %package server
-Summary: A free Socks v4/v5 server implementation
-Group: Networking/Daemons
+Summary: A free SOCKS v4/v5 server implementation
+Group: System Environment/Daemons
 Requires: dante
 
 %description server
-This package contains the socks proxy daemon and its documentation.
-The sockd is the server part of the Dante socks proxy package and
-allows socks clients to connect through it to the network.
+This package contains "sockd", the SOCKS proxy daemon and its
+documentation.  This is the server part of the Dante SOCKS proxy
+package and allows SOCKS clients to connect through it to the external
+network.
 
 %package devel
-Summary: development libraries for socks
+Summary: development libraries for SOCKS
 Group: Development/Libraries
 Requires: dante
 
 %description devel
-Additional libraries required to compile programs that use socks.
+Additional libraries required to compile programs that use SOCKS.
 
 %prep
-%setup
+%setup -n dante-@VERSION@
 
 # This file is embedded here instead of being another source in order
 # to the prefix directory
-cat >sockd.init <<EOF
+%{__cat} >sockd.init <<'EOF'
 #!/bin/sh
 #
-# sockd         This shell script takes care of starting and stopping
-#               the Dante server.
+# Init file for the Dante Socks server
+#
+# Written by Dag Wieers <dag@wieers.com>.
 #
 # chkconfig: 2345 65 35
-# description: sockd implements a socks v4/v5 proxy server
+# description: Dante SOCKS v4/v5 proxy server
+#
+# processname: sockd
+# config: %{_sysconfdir}/sockd.conf
+# pidfile: %{_localstatedir}/run/sockd.pid
+# # NOTE: if running with user.privileged as non-root, manually create
+# #       pidfile owned by the user.privileged user before starting sockd.
+# #       e.g., 'touch /var/run/sockd.pid; chown sockd /var/run/sockd.pid'
 
-# Source function library.
-. %{_initrddir}/functions
-
-# Source networking configuration.
-. %{_sysconfdir}/sysconfig/network
+source %{_initrddir}/functions
+source %{_sysconfdir}/sysconfig/network
 
 # Check that networking is up.
-[ \${NETWORKING} = "no" ] && exit 0
+[ ${NETWORKING} = "no" ] && exit 1
 
-[ -f %{_sbindir}/sockd ] || exit 0
-[ -f %{_sysconfdir}/sockd.conf ] || exit 0
+[ -x %{_sbindir}/sockd ] || exit 1
+[ -r %{_sysconfdir}/sockd.conf ] || exit 1
 
-# See how we were called.
-case "\$1" in
+RETVAL=0
+prog="sockd"
+progpath="%{_sbindir}/$prog"
+desc="Dante Socks server"
+
+start() {
+    echo -n $"Starting $desc ($prog): "
+    daemon $progpath -D
+    RETVAL=$?
+    echo
+    [ $RETVAL -eq 0 ] && touch %{_localstatedir}/lock/subsys/$prog
+    return $RETVAL
+}
+
+stop() {
+    echo -n $"Shutting down $desc ($prog): "
+    killproc $prog
+    RETVAL=$?
+    echo
+    [ $RETVAL -eq 0 ] && rm -f %{_localstatedir}/lock/subsys/$prog
+    return $RETVAL
+}
+
+restart() {
+    stop
+    start
+}
+
+reload() {
+    echo -n $"Reloading $desc ($prog): "
+    killproc $prog -HUP
+    RETVAL=$?
+    echo
+}
+
+case "$1" in
   start)
-	# Start daemons.
-	echo -n "Starting sockd: "
-	daemon %{_sbindir}/sockd -D
-	echo
-	touch %{_localstatedir}/lock/subsys/sockd
-	;;
+    start
+    ;;
   stop)
-	# Stop daemons.
-	echo -n "Shutting down sockd: "
-	killproc sockd
-	echo
-	rm -f ${_localstatedir}/lock/subsys/sockd
-	;;
+    stop
+    ;;
+  reload)
+    reload
+    ;;
   restart)
-	\$0 stop
-	\$0 start
-	;;
+    stop
+    start
+    ;;
+  condrestart)
+    [ -e %{_localstatedir}/lock/subsys/$prog ] && restart
+    RETVAL=$?
+    ;;
   status)
-	status sockd
-	;;
+    status $prog
+    RETVAL=$?
+    ;;
   *)
-	echo "Usage: sockd {start|stop|restart|status}"
-	exit 1
+    echo $"Usage: $0 {start|stop|restart|reload|condrestart|status}"
+    RETVAL=1
 esac
 
-exit 0
+exit $RETVAL
 EOF
 
 %build
 #%serverbuild
-%configure
+%configure --without-glibc-secure %{_extraflags}
 %{__make}
 
 %install
@@ -135,15 +175,14 @@ fi
 
 %files
 %defattr(-, root, root, 0755)
-%doc BUGS CREDITS NEWS README SUPPORT TODO doc/README* doc/faq.tex example/socks.conf example/socks-simple-withoutnameserver.conf example/sockd.conf example/socks-simple.conf
+%doc BUGS CREDITS NEWS README SUPPORT doc/README* example/socks.conf example/socks-simple-withoutnameserver.conf example/sockd.conf example/socks-simple.conf
 %config %{_sysconfdir}/socks.conf
-%{_libdir}/libsocks.so.0.1.0
+%{_libdir}/libsocks.so.0.1.1
 %{_libdir}/libsocks.so.0
 %{_libdir}/libsocks.so
-%{_libdir}/libdsocks.so.0.1.0
-%{_libdir}/libdsocks.so.0
 %{_libdir}/libdsocks.so
 %{_bindir}/socksify
+%{_mandir}/man1/socksify.1*
 %{_mandir}/man5/socks.conf.5*
 
 %files server
@@ -163,6 +202,16 @@ fi
 %{_includedir}/socks.h
 
 %changelog
+* Sun Feb  3 2013 Karl-Andre' Skevik <karls@inet.no>
+-Add reload() and comment about pidfile creation when starting as non-root.
+
+* Tue May 10 2011 Karl-Andre' Skevik <karls@inet.no>
+-Integrate some changes from Dag Wieers spec file at:
+ http://svn.rpmforge.net/svn/trunk/rpms/dante/dante.spec
+
+* Sat Dec 19 2009 Karl-Andre' Skevik <karls@inet.no>
+-Minor tweaking for fedora + add socksify manual page.
+
 * Wed Mar 26 2003 Karl-Andre' Skevik <karls@inet.no>
 -Integrated changes from spec file by <dag@wieers.com>, located
  at <URL:ftp://dag.wieers.com/home-made/dante/dante.spec>.

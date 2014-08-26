@@ -1,5 +1,6 @@
 /*
- * Copyright (c) 1997, 1998, 1999, 2000, 2001, 2002, 2003
+ * Copyright (c) 1997, 1998, 1999, 2000, 2001, 2002, 2003, 2004, 2005, 2006,
+ *               2008, 2009, 2010, 2011, 2012, 2013
  *      Inferno Nettverk A/S, Norway.  All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
@@ -41,592 +42,949 @@
  *
  */
 
-/* $Id: common.h,v 1.329 2006/01/15 15:33:38 karls Exp $ */
+/* $Id: common.h,v 1.931 2013/11/15 05:12:22 michaels Exp $ */
 
 #ifndef _COMMON_H_
 #define _COMMON_H_
-#endif
 
-#ifndef SOCKS_SERVER
-#define SOCKS_SERVER 0
-#endif /* !defined SOCKS_SERVER */
-
-#ifndef SOCKS_CLIENT
-#define SOCKS_CLIENT 0
-#endif /* !defined SOCKS_CLIENT */
-
-#ifndef SOCKSLIBRARY_DYNAMIC
-#define SOCKSLIBRARY_DYNAMIC 0
-#endif /* !defined SOCKSLIBRARY_DYNAMIC */
-
-/* XXX ifdef, not if, defined on command line */
+/* ifdef, not if, defined on command line */
 #ifdef HAVE_CONFIG_H
 #include "autoconf.h"
-#endif  /* HAVE_CONFIG_H */
+#endif /* HAVE_CONFIG_H */
 
-#ifndef __GNUC__
-#define __attribute__(a)
-#endif
-
-#if HAVE_LINUX_ECCENTRICITIES
-/*
- * XXX This is a hack. Avoid transparent sockaddr union used in Linux
- *  to avoid the use of the union in the code. Mainly used in
- *  interposition.c (also for CMSG_)
- */
-
-#ifdef __GNUC__
-#undef __GNUC__
-#define __GNUC__ 0
-#endif /* __GNUC__ */
-
-#endif /* HAVE_LINUX_ECCENTRICITIES */
-
-#include <sys/types.h>
-#if HAVE_SYS_TIME_H
-#include <sys/time.h>
-#endif /* HAVE_SYS_TIME_H */
-#if HAVE_SYS_FILE_H
-#include <sys/file.h>
-#endif  /* HAVE_SYS_FILE_H */
-#include <sys/resource.h>
-#include <sys/ioctl.h>
-#if HAVE_SYS_IPC_H
-#include <sys/ipc.h>
-#endif /* HAVE_SYS_IPC_H */
-#if HAVE_SYS_SEM_H
-#include <sys/sem.h>
-#endif /* HAVE_SYS_SEM_H */
-#include <sys/socket.h>
-#include <net/if.h>
-#if NEED_SYS_SOCKIO_H
-#include <sys/sockio.h>
-#endif /* NEED_SYS_SOCKIO_H */
-#include <sys/mman.h>
-#include <sys/un.h>
-#include <sys/stat.h>
-#ifdef SOCKS_DLIB_OSF
-#undef __DECC
-#endif /* SOCKS_DLIB_OSF */
-#include <sys/uio.h>
-#ifdef SOCKS_DLIB_OSF
-#define __DECC
-#endif /* SOCKS_DLIB_OSF */
-#include <sys/wait.h>
-#include <netinet/in.h>
-#if HAVE_NETINET_IP_H
-#include <netinet/ip.h>
-#endif  /* HAVE_NETINET_IP_H */
-#if HAVE_NETINET_IP_VAR_H
-#include <netinet/ip_var.h>
-#endif  /* HAVE_NETINET_IP_VAR_H */
-#include <arpa/inet.h>
-#if HAVE_ARPA_NAMESER_H
-#include <arpa/nameser.h>
-#endif /* HAVE_ARPA_NAMESER_H */
-#include <sys/mman.h>
-
-#include <assert.h>
-#if HAVE_CRYPT_H
-#include <crypt.h>
-#endif  /* HAVE_CRYPT_H */
-#include <ctype.h>
-#if SOCKSLIBRARY_DYNAMIC
-#include <dlfcn.h>
-#endif  /* SOCKSLIBRARY_DYNAMIC */
-#include <errno.h>
-#include <fcntl.h>
-#if HAVE_LIMITS_H
-#include <limits.h>
-#endif  /* HAVE_LIMITS_H */
-#include <netdb.h>
-#include <pwd.h>
-#include <setjmp.h>
-#include <signal.h>
-#ifdef STDC_HEADERS
-#include <stdarg.h>
-#else
-#include <varargs.h>
-#endif  /* STDC_HEADERS */
-#include <stdio.h>
-#include <stdlib.h>
-#if HAVE_STRINGS_H
-#include <strings.h>
-#endif  /* HAVE_STRINGS_H */
-#if STDC_HEADERS
-#include <string.h>
-#endif  /* STDC_HEADERS */
-#include <syslog.h>
-#if HAVE_LIBWRAP && HAVE_TCPD_H
-#include <tcpd.h>
-#endif  /* HAVE_LIBWRAP && HAVE_TCPD_H */
-#if TIME_WITH_SYS_TIME || (!TIME_WITH_SYS_TIME && !HAVE_SYS_TIME_H)
-#include <time.h>
-#endif
-#if HAVE_UNISTD_H
-#ifdef HAVE_DEC_PROTO
-#undef  _XOPEN_SOURCE_EXTENDED
-#endif  /* HAVE_DEC_PROTO */
-#include <unistd.h>
-#ifdef HAVE_DEC_PROTO
-#define _XOPEN_SOURCE_EXTENDED 1
-#endif /* HAVE_DEC_PROTO */
-#endif  /* HAVE_UNISTD_H */
-#if HAVE_RESOLV_H
-#include <resolv.h>
-#endif /* HAVE_RESOLV_H */
-#if HAVE_IFADDRS_H
-#include <ifaddrs.h>
-#endif /* HAVE_IFADDRS_H */
-#if HAVE_PAM
-#include <security/pam_appl.h>
-#endif /* HAVE_PAM */
+#ifndef NO_OSDEP
+#include "osdep.h"
+#endif /* !NO_OSDEP */
 
 #include "yacconfig.h"
 
-#if HAVE_LINUX_BUGS
-#if (defined __bswap_16) && (!defined __bswap_32)
-#undef ntohl
-#undef ntohs
-#undef htonl
-#undef htons
-#endif
-#endif /* HAVE_LINUX_BUGS */
-
-#ifdef lint
-extern const int lintnoloop_common_h;
-#else
-#define lintnoloop_common_h 0
-#endif
-
 #include "config.h"
 
-#define SOCKS_TRYHARDER	0	/* XXX BUGS */ /* XXX should be configure option. */
+/* global variables needed by everyone. */
+extern struct config sockscf;
+extern char *__progname;
 
-#ifndef RLIMIT_OFILE
-#define RLIMIT_OFILE RLIMIT_NOFILE
-#endif /* !RLIMIT_OFILE */
+   /*
+    * defines
+    */
 
-
-#if NEED_GETSOCKOPT_CAST
-#define getsockopt(a,b,c,d,e) getsockopt((a),(b),(c),(char *)(d),(e))
-#define setsockopt(a,b,c,d,e) setsockopt((a),(b),(c),(char *)(d),(e))
-#endif  /* NEED_GETSOCKOPT_CAST */
-
-#if !HAVE_BZERO
-#define bzero(b, len) memset(b, 0, len)
-#endif  /* !HAVE_BZERO */
-
-#if !HAVE_SIG_ATOMIC_T
-typedef int sig_atomic_t;
-#endif  /* !HAVE_SIG_ATOMIC_T */
-
-#ifdef DIAGNOSTIC
-#undef DIAGNOSTIC
-#define DIAGNOSTIC 1
+/*
+ * If we are compiling for unit-tests, there are functions
+ * that normally have static/file-local scope, but which we
+ * want to test in the unit-tests.  The below #define is used as
+ * an easy way to make those functions be compiled with global
+ * scope for unit-tests.
+ */
+#if STANDALONE_UNIT_TEST
+#define UNIT_TEST_STATIC_SCOPE
 #else
-#define DIAGNOSTIC 0
+#define UNIT_TEST_STATIC_SCOPE static
 #endif
 
-#ifdef DEBUG
-#undef DEBUG
-#define DEBUG 1
+#if DIAGNOSTIC
+/*
+ * Takes too much time, leading to one or more shmem-files usually having
+ * been deleted already by mother before child-processes get around to
+ * checking them.  Instead enable this only if we (again) suspect there
+ * are bugs related to corruption of the shmem-header.
+ */
+#define DO_SHMEMCHECK (0)
 #else
-#define DEBUG 0
+#define DO_SHMEMCHECK (0)
 #endif
 
-#if DEBUG
-#if !DIAGNOSTIC
-#undef DIAGNOSTIC
-#define DIAGNOSTIC 1
-#endif  /* !DIAGNOSTIC */
+
+/*
+ * We base ourselves on RFC 5424. (LOG_ALERT (0) - LOG_DEBUG (7))
+ */
+#define MAXLOGLEVELS        (8)
+
+
+#define PIPEBUFFER_IS_SEND_BASED       (0)
+#define PIPEBUFFER_IS_RECV_BASED       (1)
+#define PIPEBUFFER_IS_UNKNOWN_BASED    (0)
+
+#if HAVE_SOLARIS_BUGS
+#define HAVE_UNIQUE_SOCKET_INODES   (0)
+#else /* !HAVE_SOLARIS_BUGS */
+#define HAVE_UNIQUE_SOCKET_INODES   (1)
+#endif /* HAVE_SOLARIS_BUGS */
+
+#define SOCKS_IGNORE_SIGNALSAFETY   (0)
+
+#if PRERELEASE
 
 /*
  * Solaris 2.5.1 and it's stream stuff is broken and puts the processes
  * into never-never land forever on half the sendmsg() calls if they
  * involve ancillary data.  (it seems to deadlock the processes.)
+ * XXX need to retest what the current status of this is.
  */
-
-#ifndef HAVE_SENDMSG_DEADLOCK
+/* always enable if PRERELEASE */
+#undef HAVE_SENDMSG_DEADLOCK
 #define HAVE_SENDMSG_DEADLOCK 1
-#endif
 
-#ifndef HAVE_ACCEPTLOCK
-#define HAVE_ACCEPTLOCK 1
-#endif
-
-#endif  /* DEBUG */
-
-
-/* __P and __BEGIN_DECLS definitions taken from libtool manual */
-#undef __BEGIN_DECLS
-#undef __END_DECLS
-#ifdef __cplusplus
-# define __BEGIN_DECLS extern "C" {
-# define __END_DECLS }
-#else
-# define __BEGIN_DECLS /* empty */
-# define __END_DECLS /* empty */
-#endif
-
-#undef __P
-#if defined (__STDC__) || defined (_AIX) \
-	|| (defined (__mips) && defined (_SYSTYPE_SVR4)) \
-	|| defined(WIN32) || defined(__cplusplus)
-# define __P(protos) protos
-#else
-# define __P(protos) ()
-#endif
-
-#if SIZEOF_CHAR == 1
- typedef unsigned char ubits_8;
- typedef          char sbits_8;
-#else
-error "no known 8 bits wide datatype"
-#endif
-
-#if SIZEOF_SHORT == 2
- typedef unsigned short ubits_16;
- typedef          short sbits_16;
-#else
-# if SIZEOF_INT == 2
-  typedef unsigned int ubits_16;
-  typedef          int sbits_16;
-# else
-error "no known 16 bits wide datatype"
-# endif
-#endif
-
-
-#if SIZEOF_INT == 4
- typedef unsigned int ubits_32;
- typedef          int sbits_32;
-#else
-# if SIZEOF_SHORT == 4
-   typedef unsigned short ubits_32;
-   typedef          short sbits_32;
-# else
-#  if SIZEOF_LONG == 4
-    typedef unsigned long ubits_32;
-    typedef          long sbits_32;
-#  else
-error "no known 32 bits wide datatype"
-#  endif /* SIZEOF_LONG == 4 */
-# endif /* SIZEOF_SHORT == 4 */
-#endif /* SIZEOF_INT == 4 */
-
-#if !HAVE_INT8_T
-#define int8_t sbits_8
-#endif /* HAVE_INT8_T */
-
-#if !HAVE_INT16_T
-#define int16_t sbits_16
-#endif /* HAVE_INT16_T */
-
-#if !HAVE_INT32_T
-#define int32_t sbits_32
-#endif /* HAVE_INT32_T */
-
-#if !HAVE_UINT8_T
-#define uint8_t ubits_8
-#endif /* HAVE_UINT8_T */
-
-#if !HAVE_UINT16_T
-#define uint16_t ubits_16
-#endif /* HAVE_UINT16_T */
-
-#if !HAVE_UINT32_T
-#define uint32_t ubits_32
-#endif /* HAVE_UINT32_T */
-
-#if !HAVE_IN_PORT_T
-#define in_port_t ubits_16
-#endif /* HAVE_IN_PORT_T */
-
-#if !HAVE_IN_ADDR_T
-#define in_addr_t ubits_32
-#endif /* HAVE_IN_ADDR_T */
-
-#ifndef INADDR_NONE
-# define INADDR_NONE (ubits_32) 0xffffffff
-#endif  /* !INADDR_NONE */
-
-#ifndef MAX
-# define MAX(a,b) ((a) > (b) ? (a) : (b))
-#endif /* !MAX */
-
-#ifndef MIN
-# define MIN(a,b) ((a) < (b) ? (a) : (b))
-#endif /* !MIN */
-
-#if NEED_EXIT_FAILURE
-/* XXX assumes EXIT_SUCCESS is undefined too */
-#define EXIT_SUCCESS 0
-#define EXIT_FAILURE 1
-#endif /* NEED_EXIT_FAILURE */
-
-#if NEED_SA_RESTART
-#define SA_RESTART SV_INTERRUPT
-#endif  /* NEED_SA_RESTART */
-
-#if NEED_AF_LOCAL
-#define AF_LOCAL AF_UNIX
-#endif  /* NEED_AF_LOCAL */
-
-#if HAVE_NOMALLOC_REALLOC
-#define realloc(p,s) (((p) == NULL) ? (malloc(s)) : (realloc((p),(s))))
-#endif  /* HAVE_NOMALLOC_REALLOC */
-
-#if HAVE_NONULL_FREE
-#define free(p)	(((p) == NULL) ? ((void)(p)) : (free(p)))
-#endif
-
-/* __CONCAT macro from anoncvs */
-#ifndef __CONCAT
-#if defined(__STDC__) || defined(__cplusplus)
-#define __CONCAT(x,y)    x ## y
-#else
-#define __CONCAT(x,y)    x/**/y
-#endif
-#endif
-
-#ifndef __CONCAT3
-#if defined(__STDC__) || defined(__cplusplus)
-#define __CONCAT3(x,y,z)        x ## y ## z
-#else
-#define __CONCAT3(x,y,z)        x/**/y/**/z
-#endif
-#endif
-
-
-#if !HAVE_STRUCT_IPOPTS
-#define	MAX_IPOPTLEN	40
-struct ipoption {
-	struct	in_addr ipopt_dst;
-	sbits_8	ipopt_list[MAX_IPOPTLEN];
-};
-#endif  /* !HAVE_STRUCT_IPOPTS */
-
-#if !HAVE_IN6_ADDR
-/* from OpenBSD netinet6/in6.h */
-struct in6_addr {
-	union {
-		u_int8_t   __u6_addr8[16];
-		u_int16_t  __u6_addr16[8];
-		u_int32_t  __u6_addr32[4];
-	} __u6_addr;/* 128-bit IP6 address */
-};
-#define s6_addr   __u6_addr.__u6_addr8
-#endif /* !HAVE_IN6_ADDR */
-
-#if !HAVE_TIMER_MACROS
-/* timeval macros, taken from OpenBSD sys/time.h */
-#define timeradd(tvp, uvp, vvp)                                         \
-        do {                                                            \
-                (vvp)->tv_sec = (tvp)->tv_sec + (uvp)->tv_sec;          \
-                (vvp)->tv_usec = (tvp)->tv_usec + (uvp)->tv_usec;       \
-                if ((vvp)->tv_usec >= 1000000) {                        \
-                        (vvp)->tv_sec++;                                \
-                        (vvp)->tv_usec -= 1000000;                      \
-                }                                                       \
-        } while (0)
-
-#define timersub(tvp, uvp, vvp)                                         \
-        do {                                                            \
-                (vvp)->tv_sec = (tvp)->tv_sec - (uvp)->tv_sec;          \
-                (vvp)->tv_usec = (tvp)->tv_usec - (uvp)->tv_usec;       \
-                if ((vvp)->tv_usec < 0) {                               \
-                        (vvp)->tv_sec--;                                \
-                        (vvp)->tv_usec += 1000000;                      \
-                }                                                       \
-        } while (0)
-#endif /* !HAVE_TIMER_MACROS */
-
-#if 0
-#if !HAVE_SOCKADDR_STORAGE
-/*
- * sockaddr_storage (see rfc2553).
- * struct taken from OpenBSD <sys/socket.h>
- */
-struct sockaddr_storage {
-	u_int8_t    ss_len;		/* total length */
-	sa_family_t ss_family;		/* address family */
-	u_char	    __ss_pad1[6];	/* align to quad */
-	u_int64_t   __ss_pad2;		/* force alignment for stupid compilers */
-	u_char      __ss_pad3[240];	/* pad to a total of 256 bytes */
-};
-#endif /* !HAVE_SOCKADDR_STORAGE */
-#endif
-
-
-#if !HAVE_GETIFADDRS
-/* Taken from OpenBSD <ifaddrs.h> */
-struct ifaddrs {
-	struct ifaddrs  *ifa_next;
-	char		*ifa_name;
-	unsigned int	 ifa_flags;
-	struct sockaddr	*ifa_addr;
-	struct sockaddr	*ifa_netmask;
-/*XXX*/
-#undef ifa_dstaddr
-	struct sockaddr	*ifa_dstaddr;
-	void		*ifa_data;
-};
-
-/*
- * This may have been defined in <net/if.h>.  Note that if <net/if.h> is
- * to be included it must be included before this header file.
- */
-#ifndef	ifa_broadaddr
-#define	ifa_broadaddr	ifa_dstaddr	/* broadcast address interface */
-#endif
-
-#endif /* !HAVE_GETIFADDRS */
-
-/*
- * BSDI 4.1 doesn't have freeifaddrs(), but uses free()
- *  Problem reported by "Zand, Nooshin" <nooshin.zand@intel.com>
- */
-#if HAVE_GETIFADDRS && !HAVE_FREEIFADDRS
-#define freeifaddrs free
-#endif /* HAVE_GETIFADDRS && !HAVE_FREEIFADDRS */
+#endif /* PRERELEASE */
 
 #define TOIN(addr) ((struct sockaddr_in *)(addr))
 #define TOCIN(addr) ((const struct sockaddr_in *)(addr))
 
-/* global variables needed by everyone. */
-extern struct config_t sockscf;
-extern char *__progname;
+#define TOIN6(addr) ((struct sockaddr_in6 *)(addr))
+#define TOCIN6(addr) ((const struct sockaddr_in6 *)(addr))
 
-#if !HAVE_H_ERRNO
-extern int h_errno;
-#endif  /* !HAVE_H_ERRNO */
+#define TOSA(addr) ((struct sockaddr *)addr)
+#define TOCSA(addr) ((const struct sockaddr *)addr)
+#define TOSS(addr) ((struct sockaddr_storage *)addr)
+#define TOCSS(addr) ((const struct sockaddr_storage *)addr)
 
-	/*
-	 * defines
-	 */
+#define IP_MAXPORT (65535)   /* max value for ip port number. */
 
-
-#define IP_MAXPORT 65535	/* max value for ip port number. */
 
 /*
  * redefine system limits to match that of socks protocol.
  * No need for these to be bigger than protocol allows, but they
- * _must_ be atleast as big as protocol allows.
+ * _must_ be at least as big as protocol allows.
  */
 
-#ifdef	MAXHOSTNAMELEN
-#undef	MAXHOSTNAMELEN
-#endif
-#define	MAXHOSTNAMELEN		(255 + 1)		/* socks5: 255, +1 for len. */
+#ifdef   MAXHOSTNAMELEN
+#undef   MAXHOSTNAMELEN
+#endif /* MAXHOSTNAMELEN */
+#define  MAXHOSTNAMELEN    (255 + 1)      /* socks5: 255, +1 for len. */
 
-#ifdef	MAXNAMELEN
-#undef	MAXNAMELEN
-#endif
-#define	MAXNAMELEN			(255 + 1)		/* socks5: 255, +1 for len. */
-
-#ifdef	MAXPWLEN
-#undef	MAXPWLEN
-#endif
-#define	MAXPWLEN				(255 + 1)		/* socks5: 255, +1 for len. */
+#ifndef  MAXSERVICELEN
+#define  MAXSERVICELEN    (255 + 1)       /* aka /etc/services. */
+#endif /* MAXSERVICELEN */
 
 
-#define	MAXIFNAMELEN		255
+#ifdef   MAXURLLEN
+#undef   MAXURLLEN
+#endif /* MAXURLLEN */
+#define  MAXURLLEN         (255 + 1)      /* whatever. */
 
-/*									"255." "255." "255." "255" "." "65535" + NUL */
-#define	MAXSOCKADDRSTRING	 (4   +   4   + 4   +  3  + 1 +    5   + 1)
+#ifdef   MAXNAMELEN
+#undef   MAXNAMELEN
+#endif /* MAXNAMELEN */
+#define  MAXNAMELEN        (255 + 1)      /* socks5: 255, +1 for len. */
 
-/*														   "." + "65535" + NUL */
-#define	MAXSOCKSHOSTSTRING (MAXHOSTNAMELEN + 1  +    5)
+#ifdef   MAXPWLEN
+#undef   MAXPWLEN
+#endif /* MAXPWLEN */
+#define  MAXPWLEN          (255 + 1)      /* socks5: 255, +1 for len. */
 
-#define	MAXRULEADDRSTRING	 (MAXSOCKSHOSTSTRING * 2)
+#define MAXTCPINFOLEN      (2048)
+
+#if HAVE_GSSAPI
+#ifdef MAXGSSAPITOKENLEN
+#undef MAXGSSAPITOKENLEN
+#endif /* MAXGSSAPITOKENLEN */
+#define MAXGSSAPITOKENLEN (1024 * 64 - 1) /* socks5: up to 2^16 - 1 */
+
+/*
+ * GSSAPI headerlen (NOTE: SOCKS GSSAPI headerlen.  After stripping of
+ * the socks gssapi header, there is another non-socks gssapi header
+ * also on the token).
+ */
+#define GSSAPI_HLEN       (4)
+
+/*
+ * XXX should be max-size of exported state, but we don't know what it is.
+ * Is there any way to find out?
+ */
+#define MAX_GSS_STATE     (2000)
+
+#endif /* HAVE_GSSAPI */
+
+/* max number of socket options to set on the external side, per rule. */
+#define MAX_EXTERNAL_SOCKETOPTIONS (5)
+
+#define   MAXIFNAMELEN      (255)
+
+#define   MAXSOCKADDRSTRING  \
+               (sizeof("0000:0000:0000:0000:0000:0000:0000:0000.65535"))
+
+/*                                             "." + "65535" + NUL */
+#define   MAXSOCKSHOSTSTRING (MAXHOSTNAMELEN + 1  +    5)
+#define   MINSOCKSHOSTLEN    (   1 /* ATYPE              */      \
+                             +   2 /* DST.ADDR (LEN + 1) */      \
+                             +   2 /* DST.PORT           */)
+
+#define   MAXSOCKSHOSTLEN    (   1               /* ATYPE              */      \
+                             +   1               /* DST.ADDR LEN       */      \
+                             +   MAXHOSTNAMELEN  /* DST.ADDR           */      \
+                             +   2               /* DST.PORT           */)
+
+#define   MINSOCKSUDPHLEN    (   2 /* RSV                */      \
+                             +   1 /* FRAG               */      \
+                             +   MINSOCKSHOSTLEN)
+
+#define   MAXSOCKSUDPHLEN    (   2 /* RSV                */      \
+                             +   1 /* FRAG               */      \
+                             +   MAXSOCKSHOSTLEN)
+
+#define   MAXRULEADDRSTRING  (MAXSOCKSHOSTSTRING * 2 + 32 /* atype, etc. */)
+#define   MAXGWSTRING        (MAXSOCKSHOSTSTRING)
 
 
-#define MAXAUTHINFOLEN		(((sizeof("(") - 1) + MAXMETHODSTRING) \
-									+ (sizeof(")") - 1) + (sizeof("@") - 1) + MAXNAMELEN)
+#define MAXSUBDOMAINS        (10) /* a.b.c.d.e.f ... */
+
+
+#define MAXAUTHINFOLEN      (((sizeof("(") - 1) + MAXMETHODSTRING) \
+                           + (sizeof(")") - 1) + (sizeof("@") - 1) + MAXNAMELEN)
+
+
+#define MAXFACILITYNAMELEN    (8 + 1) /* max length of syslog facility name. */
 
 #ifndef NUL
 #define NUL '\0'
-#endif
+#endif /* !NUL */
+
+#define CONFIGTYPE_SERVER      1
+#define CONFIGTYPE_CLIENT      2
+
+#define PROTOCOL_TCPs         "tcp"
+#define PROTOCOL_UDPs         "udp"
+#define PROTOCOL_UNKNOWNs      "unknown"
+
+#define SOCKS_TCP             (1)
+#define SOCKS_UDP             (2)
+
+#define RESOLVEPROTOCOL_UDP   (SOCKS_UDP)
+#define RESOLVEPROTOCOL_TCP   (SOCKS_TCP)
+#define RESOLVEPROTOCOL_FAKE  (3)
+
+#define LOGTYPE_SYSLOG        0x1
+#define LOGTYPE_FILE          0x2
 
 /*
- * We don't care whether it's called O_NONBLOCK, FNDELAY or whatever.
- * We just want to know whether the flags set give blocking or nonblocking
- * semantics.
+ * Some things we may want to log at different levels in the server and
+ * the client.  Use #defines here that map to the appropriate level.
  */
-#ifndef FNDELAY
-#define NONBLOCKING	(O_NONBLOCK | O_NDELAY)
-#else
-#define NONBLOCKING	(O_NONBLOCK | FNDELAY | O_NDELAY)
+#if SOCKS_CLIENT
+#define LOG_NEGOTIATE         (LOG_INFO)
+#else /* SOCKS_SERVER */
+#define LOG_NEGOTIATE         (LOG_DEBUG)
 #endif
 
-#define CONFIGTYPE_SERVER		1
-#define CONFIGTYPE_CLIENT		2
 
-#define PROTOCOL_TCPs			"tcp"
-#define PROTOCOL_UDPs			"udp"
-#define PROTOCOL_UNKNOWNs		"unknown"
+#define NOMEM                 "<memory exhausted>"
 
-#define RESOLVEPROTOCOL_UDP	0
-#define RESOLVEPROTOCOL_TCP	1
-#define RESOLVEPROTOCOL_FAKE	2
+/* environment variables used. */
+#define ENV_HTTP_PROXY                     "HTTP_CONNECT_PROXY"
+#define ENV_SOCKS4_SERVER                  "SOCKS4_SERVER"
+#define ENV_SOCKS5_PASSWD                  "SOCKS5_PASSWD"
+#define ENV_SOCKS5_SERVER                  "SOCKS5_SERVER"
+#define ENV_SOCKS5_USER                    "SOCKS5_USER"
+#define ENV_SOCKS_BINDLOCALONLY            "SOCKS_BINDLOCALONLY"
+#define ENV_SOCKS_CONF                     "SOCKS_CONF"
+#define ENV_SOCKS_DEBUG                    "SOCKS_DEBUG"
+#define ENV_SOCKS_DIRECTROUTE_FALLBACK     "SOCKS_DIRECTROUTE_FALLBACK"
+#define ENV_SOCKS_DISABLE_THREADLOCK       "SOCKS_DISABLE_THREADLOCK"
+#define ENV_SOCKS_ERRLOGOUTPUT             "SOCKS_ERRLOGOUTPUT"
+#define ENV_SOCKS_LOGOUTPUT                "SOCKS_LOGOUTPUT"
+#define ENV_SOCKS_PASSWD                   "SOCKS_PASSWD"
+#define ENV_SOCKS_PASSWORD                 "SOCKS_PASSWORD"
+#define ENV_SOCKS_ROUTE_                   "SOCKS_ROUTE_"   /* _<number> */
+#define ENV_SOCKS_SERVER                   "SOCKS_SERVER"
+#define ENV_SOCKS_USER                     "SOCKS_USER"
+#define ENV_SOCKS_USERNAME                 "SOCKS_USERNAME"
+#define ENV_TMPDIR                         "TMPDIR"
+#define ENV_UPNP_IGD                       "UPNP_IGD"
+#define ENV_SOCKS_AUTOADD_LANROUTES        "SOCKS_AUTOADD_LANROUTES"
+#define ENV_SOCKS_REDIRECT_FROM            "SOCKS_REDIRECT_FROM"
 
-#define LOGTYPE_SYSLOG			0x1
-#define LOGTYPE_FILE				0x2
+   /*
+    * macros
+    */
 
-#define NOMEM						"<memory exhausted>"
+/*
+ * CompileTime assert.  Based on an article in DrDobbs by Ralf Holly.
+ * (http://www.drdobbs.com/compile-time-assertions/184401873)
+ */
+#define CTASSERT(exp)                     \
+do {                                      \
+   enum { assert_static__ = 1/(exp) };    \
+} while (/* CONSTCOND */ 0)
+
+/*
+ * Error macros.
+ */
+
+#if HAVE_LIVEDEBUG /* try to generate a coredump and continue if server. */
+
+#if SOCKS_CLIENT
+#define SET_INTERNAL_ERROR() do {                                              \
+   sockscf.state.internalerrordetected = 1;                                    \
+} while (/* CONSTCOND */ 0)
+
+#else /* !SOCKS_CIENT */
+#define SET_INTERNAL_ERROR() do { } while (/* CONSTCOND */ 0)
+#endif /* !SOCKS_CLIENT */
+
+#define HANDLE_RINGBUFFER()                                                    \
+do {                                                                           \
+   SET_INTERNAL_ERROR();                                                       \
+                                                                               \
+   if (!sockscf.option.debug)                                                  \
+      socks_flushrb();                                                         \
+} while (/* CONSTCOND */ 0)
+
+#else  /* !HAVE_LIVEDEBUG */
+#define HANDLE_RINGBUFFER() do { } while (/* CONSTCOND */ 0)
+
+#endif /* !HAVE_LIVEDEBUG */
+
+#define SASSERT_STARTSTRING "an internal error was detected at "
+#define SASSERT_ENDSTRING   \
+"Please report this to Inferno Nettverk A/S at \"" LCPRODUCT "-bugs@inet.no\"."\
+"  Please check for a coredump too."
+
+#define SIGNALSLOG_WITH_ERRNO(value, expstr, err)                              \
+do {                                                                           \
+   char _b[10][32];                                                            \
+   const char *_msgv[]                                                         \
+   = { SASSERT_STARTSTRING,                                                    \
+       __FILE__,                                                               \
+       ":",                                                                    \
+       ltoa(__LINE__, _b[0], sizeof(_b[0])),                                   \
+       ", value ",                                                             \
+       ltoa((value), _b[1], sizeof(_b[1])),                                    \
+       ", expression \"",                                                      \
+       (expstr),                                                               \
+       "\", errno ",                                                           \
+       ltoa(err, _b[2], sizeof(_b[2])),                                        \
+       " (",                                                                   \
+       strerror(errno),                                                        \
+       ").  Version: ",                                                        \
+       rcsid,                                                                  \
+       ".  ",                                                                  \
+       SASSERT_ENDSTRING,                                                      \
+       NULL                                                                    \
+     };                                                                        \
+                                                                               \
+   signalslog(LOG_WARNING, _msgv);                                             \
+} while (/* CONSTCOND */ 0)                                                    \
+
+#define SIGNALSLOG_WITHOUT_ERRNO(value, expstr)                                \
+do {                                                                           \
+   char _b[10][32];                                                           \
+   const char *_msgv[]                                                         \
+   = { SASSERT_STARTSTRING,                                                    \
+       __FILE__,                                                               \
+       ":",                                                                    \
+       ltoa(__LINE__, _b[0], sizeof(_b[0])),                                   \
+       ", value ",                                                             \
+       ltoa((value), _b[1], sizeof(_b[1])),                                    \
+       ", expression \"",                                                      \
+       (expstr),                                                               \
+       "\"",                                                                   \
+       ".  Version: ",                                                         \
+       rcsid,                                                                  \
+       ".  ",                                                                  \
+       SASSERT_ENDSTRING,                                                      \
+       NULL                                                                    \
+     };                                                                        \
+                                                                               \
+   signalslog(LOG_WARNING, _msgv);                                             \
+} while (/* CONSTCOND */ 0)
+
+#define SIGNALSLOG_WITH_ERRNO_FAD(_value, expstr, err)                         \
+do {                                                                           \
+   char _b[10][32];                                                           \
+   const char *_msgv[]                                                         \
+   = { SASSERT_STARTSTRING,                                                    \
+       __FILE__,                                                               \
+       ":",                                                                    \
+       ltoa(__LINE__, _b[0], sizeof(_b[0])),                                   \
+       ", by pid ",                                                            \
+       ltoa(getppid(), _b[1], sizeof(_b[1])),                                  \
+       ".  Value ",                                                            \
+       ltoa((_value), _b[2], sizeof(_b[2])),                                   \
+       ", expression \"",                                                      \
+       (expstr),                                                               \
+       "\", errno ",                                                           \
+       ltoa(err, _b[3], sizeof(_b[3])),                                        \
+       " (",                                                                   \
+       strerror(errno),                                                        \
+       ").  Version: ",                                                        \
+       rcsid,                                                                  \
+       ".  ",                                                                  \
+       SASSERT_ENDSTRING,                                                      \
+       NULL                                                                    \
+     };                                                                        \
+                                                                               \
+   signalslog(LOG_WARNING, _msgv);                                             \
+} while (/* CONSTCOND */ 0)                                                    \
+
+#define SIGNALSLOG_WITHOUT_ERRNO_FAD(_value, expstr)                           \
+do {                                                                           \
+   char _b[10][32];                                                           \
+   const char *_msgv[]                                                         \
+   = { SASSERT_STARTSTRING,                                                    \
+       __FILE__,                                                               \
+       ":",                                                                    \
+       ltoa(__LINE__, _b[0], sizeof(_b[0])),                                   \
+       ", by pid ",                                                            \
+       ltoa(getppid(), _b[1], sizeof(_b[1])),                                  \
+       ".  Value ",                                                            \
+       ltoa((_value), _b[2], sizeof(_b[2])),                                   \
+       ", expression \"",                                                      \
+       (expstr),                                                               \
+       "\"",                                                                   \
+       ".  Version: ",                                                         \
+       rcsid,                                                                  \
+       ".  ",                                                                  \
+       SASSERT_ENDSTRING,                                                      \
+       NULL                                                                    \
+     };                                                                        \
+                                                                               \
+   signalslog(LOG_WARNING, _msgv);                                             \
+} while (/* CONSTCOND */ 0)
+
+#define SERR_BODY(_value, expstr, _err)                                        \
+do {                                                                           \
+   const int err = (_err);                                                     \
+                                                                               \
+   SIGNALSLOG_WITH_ERRNO(_value, expstr, err);                                 \
+   HANDLE_RINGBUFFER();                                                        \
+   abort();                                                                    \
+} while (/* CONSTCOND */ 0)
+
+                                                                               \
+#define SERRX_BODY(_value, expstr)                                             \
+do {                                                                           \
+   SIGNALSLOG_WITHOUT_ERRNO(_value, expstr);                                   \
+   HANDLE_RINGBUFFER();                                                        \
+   abort();                                                                    \
+} while (/* CONSTCOND */ 0)
 
 
-	/*
-	 * macros
-	 */
+#define SWARN_BODY(_value, expstr, _err)                                       \
+do {                                                                           \
+   pid_t forked;                                                               \
+   const int err = (_err);                                                     \
+                                                                               \
+   switch ((forked = fork())) {                                                \
+      case -1:                                                                 \
+         SIGNALSLOG_WITH_ERRNO(_value, expstr, err);                           \
+         break;                                                                \
+                                                                               \
+      case 0:                                                                  \
+         newprocinit();                                                        \
+         SIGNALSLOG_WITH_ERRNO_FAD(_value, expstr, err);                       \
+         HANDLE_RINGBUFFER();                                                  \
+         abort();                                                              \
+         break; /* NOTREACHED */                                               \
+                                                                               \
+      default:                                                                 \
+         SIGNALSLOG_PARENT_CONTINUING(forked);                                 \
+   }                                                                           \
+} while (/* CONSTCOND */ 0)
+
+#define SWARNX_BODY(_value, expstr)                                            \
+do {                                                                           \
+   pid_t forked;                                                               \
+                                                                               \
+   switch ((forked = fork())) {                                                \
+      case -1:                                                                 \
+         SIGNALSLOG_WITHOUT_ERRNO(_value, expstr);                             \
+         break;                                                                \
+                                                                               \
+      case 0:                                                                  \
+         newprocinit();                                                        \
+         SIGNALSLOG_WITHOUT_ERRNO_FAD(_value, expstr);                         \
+         HANDLE_RINGBUFFER();                                                  \
+         abort();                                                              \
+         break; /* NOTREACHED */                                               \
+                                                                               \
+      default:                                                                 \
+         SIGNALSLOG_PARENT_CONTINUING(forked);                                 \
+   }                                                                           \
+} while (/* CONSTCOND */ 0)
+
+#define SIGNALSLOG_PARENT_CONTINUING(childpid)                                 \
+do {                                                                           \
+   char _b[10][32];                                                            \
+   const char *_msgv[]                                                         \
+   = { "continuing after internal error.  Unless disabled on system we "       \
+       "should have a coredump from pid ",                                     \
+       ltoa(getpid(), _b[0], sizeof(_b[0])),                                   \
+       " by way of pid ",                                                      \
+       ltoa((childpid), _b[1], sizeof(_b[1])),                                 \
+       " now",                                                                 \
+       NULL                                                                    \
+     };                                                                        \
+                                                                               \
+   signalslog(LOG_WARNING, _msgv);                                             \
+} while (/* CONSTCOND */ 0)
 
 
-#ifndef _NO_FUNCTION_REDIFINE
-#define close(n)	closen(n)
+#define SWARN(expression)                                                      \
+do {                                                                           \
+    const long _value = (const long)(expression);                              \
+    const char *expstr = #expression;                                          \
+                                                                               \
+    SWARN_BODY(_value, expstr, errno);                                         \
+} while (/* CONSTCOND */ 0)
 
-/* XXX needed on AIX apparently */
-#ifdef recvmsg
-#define recvmsg_system recvmsg
-#undef recvmsg
-#endif /* recvmsg */
+#define SWARNX(expression)                                                     \
+do {                                                                           \
+    const long _value = (const long)(expression);                              \
+    const char *expstr = #expression;                                          \
+                                                                               \
+    SWARNX_BODY(_value, expstr);                                               \
+} while (/* CONSTCOND */ 0)
 
-#if HAVE_SYSTEM_XMSG_MAGIC
-#undef recvmsg_system
-#define recvmsg_system nrecvmsg
-#endif /* HAVE_SYSTEM_XMSG_MAGIC */
+#define SERR(expression)                                                       \
+do {                                                                           \
+    const long _value = (const long)(expression);                              \
+    const char *expstr = #expression;                                          \
+                                                                               \
+    SERR_BODY(_value, expstr, errno);                                          \
+} while (/* CONSTCOND */ 0)
 
-#define recvmsg(s, msg, flags)	recvmsgn(s, msg, flags)
+#define SERRX(expression)                                                      \
+do {                                                                           \
+    const long _value = (const long)(expression);                              \
+    const char *expstr = #expression;                                          \
+                                                                               \
+    SERRX_BODY(_value, expstr);                                                \
+} while (/* CONSTCOND */ 0)
 
-#ifdef sendmsg
-#define sendmsg_system sendmsg
-#undef sendmsg
-#endif /* sendmsg */
+#define SASSERT(expression)                                                    \
+do {                                                                           \
+   const long _value  = (const long)(expression);                              \
+   const char *expstr = #expression;                                           \
+                                                                               \
+   if (_value == 0)                                                            \
+      SERR_BODY(_value, expstr, errno);                                        \
+} while (/* CONSTCOND */ 0)
 
-#if HAVE_SYSTEM_XMSG_MAGIC
-#undef sendmsg_system
-#define sendmsg_system nsendmsg
-#endif /* HAVE_SYSTEM_XMSG_MAGIC */
+#define SASSERTX(expression)                                                   \
+do {                                                                           \
+   const long _value  = (const long)(expression);                              \
+   const char *expstr = #expression;                                           \
+                                                                               \
+   if (_value == 0)                                                            \
+      SERRX_BODY(_value, expstr);                                              \
+} while (/* CONSTCOND */ 0)
 
-#define sendmsg(s, msg, flags)	sendmsgn(s, msg, flags)
+#if 0
+/* so we can attach to the process while it's alive ... */
+#define abort() do { sleep(60); } while (1)
+#endif
 
-#endif /* _NO_FUNCTION_REDIFINE */
+
+/*
+ * Make sure length of "_src" is not larger than the size of "_dst".
+ */
+#define STRCPY_ASSERTLEN(__dst, __src)                                         \
+do {                                                                           \
+   const void *_src   = (__src);                                               \
+   const size_t _len = strlen((const char *)_src);                             \
+   void *_dst        = (__dst);                                                \
+                                                                               \
+   SASSERTX(_len <= (sizeof((__dst)) - 1));                                    \
+   memcpy((_dst), (_src), _len + 1);                                           \
+} while (/* CONSTCOND */ 0)
 
 
-#define PORTISRESERVED(port)	\
-	(ntohs((port)) != 0 && ntohs((port)) < IPPORT_RESERVED)
+/*
+ * Round up or down a struct timeval to whole seconds.
+ */
+#define timeval2seconds(tval)                                                  \
+   ((tval)->tv_sec + ((tval)->tv_usec >= 500000 ? 1 : 0))
+
+
+/*
+ * Make sure length of "_src" is not lager than "maxlen", and copy it to _dst.
+ */
+#define STRCPY_CHECKLEN(__dst, __src, _maxlen, _function)                      \
+do {                                                                           \
+   const void *_src  = (__src);                                                \
+   const size_t _len = strlen((const char *)_src);                             \
+   void *_dst        = (__dst);                                                \
+                                                                               \
+   if (_len >= (_maxlen) - 1) {                                                \
+      _function("the value given is %lu bytes long, but the maximum length, "  \
+                "set at compiletime, is %lu",                                  \
+                (unsigned long)(_len),                                         \
+                (unsigned long)((_maxlen)));                                   \
+       break;                                                                  \
+   }                                                                           \
+                                                                               \
+   memcpy((_dst), (_src), _len + 1);                                           \
+} while (/* CONSTCOND */ 0)
+
+
+#define STRCPY_ASSERTSIZE(__dst, __src)                                        \
+do {                                                                           \
+   const void *_src  = (__src);                                                \
+   const size_t _len = strlen((const char *)_src);                             \
+   void *_dst        = (__dst);                                                \
+                                                                               \
+   CTASSERT(sizeof((__dst)) >= sizeof((__src)));                               \
+   SASSERTX(_len + 1 <= sizeof((__dst)));                                      \
+                                                                               \
+   memcpy((_dst), (_src), _len + 1);                                           \
+} while (0 /* CONSTCOND */)
+
+
+#define STRCPY_CHECKUTFLEN(__dst, __src, _maxlen, _function)                   \
+do {                                                                           \
+   const void *_src  = (__src);                                                \
+   const size_t _len = strlen((const char *)__src);                            \
+   void *_dst        = (__dst);                                                \
+   char *utfsrc;                                                               \
+                                                                               \
+   if (_len / 2 >= ((_maxlen) - 1)) {                                          \
+      _function("the value given is %lu bytes long, but the maximum length, "  \
+               "set at compiletime, is %lu",                                   \
+               (unsigned long)(_len / 2),                                      \
+               (unsigned long)((_maxlen) - 1));                                \
+       break;                                                                  \
+   }                                                                           \
+                                                                               \
+   if ((utfsrc = hextoutf8((const char *)_src, 2)) == NULL)                    \
+      _function("failed to convert string \"%s\" to UTF-8",                    \
+                (const char *)_src);                                           \
+                                                                               \
+   strncpy((char *)_dst, utfsrc, (_maxlen) - 1);                               \
+   ((char *)(_dst))[(_maxlen) - 1] = NUL;                                      \
+} while (/* CONSTCOND */ 0)
+
+
+/*
+ * Can not call these function directly since we need to make sure unused
+ * bytes in the destination are zero (requirement of the socket API),
+ * but the size of the destination can vary. :-/
+ */
+
+#define sockshost2sockaddr2(host, addr, gaierr, emsg, emsglen)                 \
+   int_sockshost2sockaddr2((host),                                             \
+                           (addr),                                             \
+                           sizeof((*addr)),                                    \
+                           (gaierr),                                           \
+                           (emsg),                                             \
+                           (emsglen))                                          \
+
+#define sockshost2sockaddr(host, addr)                                         \
+   int_sockshost2sockaddr((host), addr, sizeof((*addr)))
+
+#define fakesockshost2sockaddr(host, addr)                                     \
+   int_fakesockshost2sockaddr((host), (addr), sizeof((*addr)))
+
+#define urlstring2sockaddr(string, addr, gaierr, emsg, elen)                   \
+   int_urlstring2sockaddr((string),                                            \
+                          (addr),                                              \
+                          sizeof((*addr)),                                     \
+                          (gaierr),                                            \
+                          (emsg),                                              \
+                          (elen))
+
+#define ruleaddr2sockaddr(ruleaddr, addr, protocol)                            \
+   int_ruleaddr2sockaddr((ruleaddr), (addr), sizeof((*addr)), (protocol))
+
+#define ruleaddr2sockaddr2(ruleaddr, addr, protocol, gaierr, emsg, emsglen)    \
+   int_ruleaddr2sockaddr2((ruleaddr),                                          \
+                          (addr),                                              \
+                          (sizeof((*addr))),                                   \
+                          (protocol),                                          \
+                          (gaierr),                                            \
+                          (emsg),                                              \
+                          (emsglen))
+
+#define hostname2sockaddr(name, index, addr)                                   \
+   int_hostname2sockaddr((name), (index), addr, sizeof((*addr)))
+
+#define ifname2sockaddr(ifname, index, addr, mask)                             \
+   int_ifname2sockaddr((ifname),                                               \
+                       (index),                                                \
+                       (addr),                                                 \
+                       sizeof((*addr)),                                        \
+                       (mask),                                                 \
+                       sizeof((*mask)))
+
+
+#if HAVE_GSSAPI
+#define GSSAPI_OVERHEAD(gssapistate) \
+   ((MAXGSSAPITOKENLEN - GSSAPI_HLEN) - (gssapistate)->maxgssdata)
+
+#define GSSERR_IS_OK(e)                                                        \
+   (  (e) == GSS_S_CONTEXT_EXPIRED                                             \
+   || (e) == GSS_S_CREDENTIALS_EXPIRED)
+#endif /* HAVE_GSSAPI */
+
+/*
+ * Matched against sockscf.option.debug.  If the value there is
+ * >= to DEBUG_NORMAL, do normal debug logging.  If >= DEBUG_VERBOSE,
+ * do verbose, possibly expensive, debug logging also.
+ */
+#define DEBUG_NORMAL    (1)
+#define DEBUG_VERBOSE   (2)
+
+/*
+ * If client, it might need to call malloc(3) to expand socksfdv
+ * from the signal handler upon SIGIO, but if we are in a gssapi-function
+ * that also is calling malloc(3) ... Still not safe of course, as we
+ * have no idea if client is in a function that has called malloc(3).
+ */
+#if SOCKS_CLIENT
+
+#define SOCKS_SIGBLOCK_IF_CLIENT(sig, oldset) \
+do { socks_sigblock(sig, oldset); } while (/* CONSTCOND */ 0)
+
+#define SOCKS_SIGUNBLOCK_IF_CLIENT(oldset) \
+do { socks_sigunblock(oldset); } while (/* CONSTCOND */ 0)
+
+#define SIGSET_ALLOCATE(name) sigset_t name
+
+#else /* !SOCKS_CLIENT */
+#define SIGSET_ALLOCATE(name)
+#define SOCKS_SIGBLOCK_IF_CLIENT(sig, oldset)
+#define SOCKS_SIGUNBLOCK_IF_CLIENT(oldset)
+#endif /* !SOCKS_CLIENT */
+
+/* due to external libraries/software trying to log to stdout/stderr. :-( */
+#define FD_IS_RESERVED_EXTERNAL(fd)    \
+   ((fd) == STDOUT_FILENO || (fd) == STDERR_FILENO)
+
+
+/*
+ * when using very large numbers (e.g., 9223372036854775807 on a 64 bit cpu),
+ * difftime() returns strange results, even when the second arg is 0.
+ * Don't know why, but converting the time_t value to double and
+ * then back to time_t changes 9223372036854775807 to -9223372036854775808,
+ * which seems to be what happens when we do the equivalent of
+ * difftime(9223372036854775807, 0)
+ *
+ * The below seems to work better, so use it until we encounter a platform
+ * where it does not work better.
+ */
+#define socks_difftime(t1, t2)  ((t1) - (t2))
+
+/*
+ * Wrappers for our own functions that modify things a little in a way
+ * that should not have any negative effects.
+ */
+#define close(n)            closen(n)
+#define socket(d, t, p)     socks_socket(d, t, p)
+#define strerror(e)         socks_strerror(e)
+#define getifaddrs(ifap)    socks_getifaddrs(ifap)
+
+#undef snprintf
+#define snprintf   snprintfn
+
+/*
+ * If "str", of size "strused", contains characters present in
+ * "strip", strips them off from "str".
+ */
+#define STRIPTRAILING(str, strused, strip)      \
+do {                                            \
+   ssize_t i;                                   \
+                                                \
+   for (i = (ssize_t)(strused) - 1; i > 0; --i) \
+      if (strchr((strip), str[i]) != NULL)      \
+         (str)[i] = NUL;                        \
+      else                                      \
+         break;                                 \
+} while (/* CONSTCOND */ 0)
+
+#define SKIPLEADING(str, strip)                 \
+do {                                            \
+   while (*(str) != NUL)                        \
+      if (strchr((strip), *(str)))              \
+         ++(str);                               \
+      else                                      \
+         break;                                 \
+} while (/* CONSTCOND */ 0)
+
+
+/*
+ * for dynamically-sized fd_sets.  Note that this means all our fd_set's
+ * must be maxsize, or the macros we define will write over memory not
+ * belonging to them.
+ */
+
+#ifndef howmany
+#define howmany(x, y) (((x) + ((y) - 1)) / (y))
+#endif /* !howmany */
+
+#define SOCKD_FD_SIZE() \
+((size_t)(howmany((sockscf.state.maxopenfiles + 1), NFDBITS) * sizeof(fd_mask)))
+
+#ifdef FD_ZERO
+#undef FD_ZERO
+#endif /* FD_ZERO */
+
+#define FD_ZERO(p)                      \
+do {                                    \
+   memset((p), 0, SOCKD_FD_SIZE());     \
+} while (/* CONSTCOND */ 0)
+
+#ifdef FD_CMP
+#undef FD_CMP
+#endif /* FD_CMP */
+
+#define FD_CMP(a, b) (memcmp((a), (b), SOCKD_FD_SIZE()))
+
+#ifdef FD_COPY
+#undef FD_COPY
+#endif /* FD_COPY */
+
+#define FD_COPY(dst, src)                 \
+do {                                      \
+   memcpy((dst), (src), SOCKD_FD_SIZE()); \
+} while (/* CONSTCOND */ 0)
+
+
+
+#define ERRNOISNOFILE(errno) \
+   ((errno) == EMFILE || (errno) == ENFILE)
+
+#define ERRNOISRST(errno) \
+   ((errno) == ECONNREFUSED || (errno) == ECONNRESET)
+
+#define ERRNOISPREVIOUSPACKET(errno)                                           \
+(     ERRNOISRST(errno)                                                        \
+   || ERRNOISNOROUTE(errno)   /* Linux ... */                                  \
+   || ERRNOISACCES(errno)     /* Linux ... */                                  \
+   || (errno) == EMSGSIZE     /* Linux ... */                                  \
+   || (errno) == ETIMEDOUT                                                     \
+)
+
+#define ERRNOISTMP(errno)      \
+   (  (errno) == EAGAIN        \
+   || (errno) == EWOULDBLOCK   \
+   || (errno) == EINTR         \
+   || (errno) == ENOBUFS       \
+   || (errno) == ENOMEM        \
+   || (errno) == ENOMSG)
+
+#define ERRNOISACCES(errno) ((errno) == EPERM || (errno) == EACCES)
+
+#define ERRNOISNOROUTE(errno) \
+   ((errno) == ENETUNREACH || (errno) == EHOSTUNREACH || (errno) == ENETDOWN)
+
+#define ERRNOISNETWORK(errno) (\
+   ERRNOISNOROUTE(errno)       \
+|| ERRNOISRST(errno)           \
+)
+
+#define PORTISRESERVED(port)   \
+   (ntohs((port)) != 0 && ntohs((port)) < IPPORT_RESERVED)
+
+#define IPADDRISBOUND(addr) \
+(TOSA((addr))->sa_family == AF_UNSPEC ?                                        \
+   0 : (TOSA((addr))->sa_family == AF_INET ?                                   \
+         (TOIN((addr))->sin_addr.s_addr != htonl(INADDR_ANY))                  \
+      :  (memcmp(TOIN6((addr))->sin6_addr.s6_addr,                             \
+                 &in6addr_any,                                                 \
+                 sizeof(in6addr_any)) != 0))                                   \
+)
+
+#define PORTISBOUND(addr) \
+(TOSA((addr))->sa_family == AF_UNSPEC ?                                        \
+   0 : (TOSA((addr))->sa_family == AF_INET ?                                   \
+        (ntohs(TOIN((addr))->sin_port) != 0)                                   \
+      : (ntohs(TOIN6((addr))->sin6_port)) != 0)                                \
+)
 
 #define ADDRISBOUND(addr) \
-	((((struct sockaddr_in *)(&addr))->sin_addr.s_addr != htonl(INADDR_ANY)) \
-	|| (((struct sockaddr_in *)(&addr))->sin_port != htons(0)))
+   (IPADDRISBOUND((addr)) && PORTISBOUND((addr)))
+
+#define SOCKSHOSTISNOTBOUND(host)                                              \
+  ((host)->port == htons(0) || !SOCKSHOST_ADDRISBOUND(host))
+
+#define SOCKSHOSTISBOUND(host)  (!(SOCKSHOSTISNOTBOUND((host))))
+
+#define SOCKSHOST_ADDRISBOUND(host)                                            \
+(  ((host)->atype == SOCKS_ADDR_DOMAIN && *host->addr.domain != NUL)           \
+|| ((host)->atype == SOCKS_ADDR_IPV4                                           \
+   && (host)->addr.ipv4.s_addr != htonl(INADDR_ANY))                           \
+|| ((host)->atype == SOCKS_ADDR_IPV6                                           \
+   && memcmp(&(host)->addr.ipv6, &in6addr_any, sizeof(in6addr_any))) != 0)
+
+#define RULEPORT_START(addr, protocol) (                                       \
+   ((protocol) == SOCKS_TCP ? (addr)->port.tcp : (addr)->port.udp))
+
+#if HAVE_SOCKADDR_SA_LEN
+
+#define SET_SOCKADDRLEN(sa, len)       \
+do {                                   \
+   ((sa)->ss_len = (len));             \
+} while (/* CONSTCOND */ 0)
+
+#else /* !HAVE_SOCKADDR_SA_LEN */
+
+#define SET_SOCKADDRLEN(sa, len)
+
+#endif /* !HAVE_SOCKADDR_SA_LEN */
+
+#define SET_SOCKADDR(sa, family)                                               \
+do {                                                                           \
+   ((sa)->ss_family = (family));                                               \
+   SET_SOCKADDRLEN((sa), salen((family)));                                     \
+} while (/* CONSTCOND */ 0)
+
+#define SET_SOCKADDRPORT(sa, port)                                             \
+do {                                                                           \
+   switch ((sa)->ss_family) {                                                  \
+      case AF_INET:                                                            \
+         (TOIN(sa))->sin_port   = (port);                                      \
+         break;                                                                \
+                                                                               \
+      case AF_INET6:                                                           \
+         (TOIN6(sa))->sin6_port = (port);                                      \
+         break;                                                                \
+                                                                               \
+      default:                                                                 \
+         SERRX((sa)->ss_family);                                               \
+   }                                                                           \
+} while (/* CONSTCOND */ 0)
+
+
+#define GET_SOCKADDRPORT(sa)                                                   \
+   (((sa)->ss_family) == AF_INET ?                                             \
+         TOCIN(sa)->sin_port : TOCIN6(sa)->sin6_port)                          \
+
+#define SET_SOCKADDRADDR(sa, addr)                                             \
+do {                                                                           \
+   switch ((sa)->ss_family) {                                                  \
+      case AF_INET:                                                            \
+         memcpy(&(TOIN(sa))->sin_addr, addr, sizeof(TOIN(sa))->sin_addr);      \
+         break;                                                                \
+                                                                               \
+      case AF_INET6:                                                           \
+         memcpy(&(TOIN6(sa))->sin6_addr, addr, sizeof(TOIN6(sa))->sin6_addr);  \
+         break;                                                                \
+                                                                               \
+      default:                                                                 \
+         SERRX((sa)->ss_family);                                               \
+   }                                                                           \
+} while (/* CONSTCOND */ 0)
+
+
+#define GET_SOCKADDRADDR(sa)                                                   \
+   (((sa)->ss_family) == AF_INET ?                                             \
+         ((const void *)&(TOCIN(sa)->sin_addr))                                \
+      :  ((const void *)&(TOCIN6(sa)->sin6_addr)))                             \
+
+
 
 #define ELEMENTS(array) (sizeof(array) / sizeof(array[0]))
 
 #define OCTETIFY(a) ((a) &= 0xff)
 /*
- * Note that it's the argument that will be truncated, not just the
- * return value.
+ * Note that the argument will be truncated, not just the return value.
  */
+
+
+/*
+ * Stuff for messages between our processes.
+ */
+
+/* padding for each message between mother/child, including separation. */
+#define SENDMSG_PADBYTES   (sizeof(long) * 64) /* just a guess. */
 
 
 /*
@@ -635,7 +993,7 @@ extern int h_errno;
 
 /*
  * Modern CMSG alignment macros. Use them if the platform has them,
- * if not we get the default behaviour.
+ * if not we get the default behavior.
  */
 
 #if HAVE_CMSGHDR
@@ -661,231 +1019,187 @@ extern int h_errno;
 #endif /* HAVE_CMSGHDR */
 
 /*
- * allocate memory for a controlmessage of size "size".  "name" is the
+ * allocate memory for a control message of size "size".  "name" is the
  * name of the allocated memory.
  */
 #if HAVE_CMSGHDR
-#define CMSG_AALLOC(name, size) \
-	union { \
-		char cmsgmem[CMSG_SPACE(size)]; \
-		struct cmsghdr align; \
-	} __CONCAT3(_, name, mem); \
-	struct cmsghdr *name = &__CONCAT3(_, name, mem).align
+
+#define CMSG_AALLOC(name, size)           \
+   union {                                \
+      char   cmsgmem[CMSG_SPACE(size)];   \
+      struct cmsghdr align;               \
+   } __CONCAT3(_, name, mem) = { { 0 } };    /* cleared to appease valgrind */ \
+   struct cmsghdr *name = (struct cmsghdr *)__CONCAT3(_, name, mem).cmsgmem;
+
 #else /* !HAVE_CMSGHDR */
+
 #define CMSG_AALLOC(name, size) \
-	char name[(size)]
+
+   char name[(size)] = NUL;
+
 #endif /* !HAVE_CMSGHDR */
 
+
 /*
- * Returns the size of the previously allocated controlmessage named
+ * Returns the size of the previously allocated control message named
  * "name"
  */
 #if HAVE_CMSGHDR
 #define CMSG_MEMSIZE(name) (sizeof(__CONCAT3(_, name, mem)))
 #else /* !HAVE_CMSGHDR */
 #define CMSG_MEMSIZE(name) (sizeof((name)))
-#endif
+#endif /* HAVE_CMSGHDR */
 
 /*
- * Returns the controldata member of "msg".
+ * Verifies length of received control message.
+ *
+ * Final padding might not be present in received message,
+ * expected length can be either value of CMSG_SPACE() or CMSG_LEN().
+ */
+#define CMSG_RCPTLEN_ISOK(msg, datalen)                                        \
+    ((datalen) == 0 ? ((size_t)(CMSG_TOTLEN(msg) == 0))                        \
+            :   ((size_t)CMSG_TOTLEN((msg)) == (size_t)(CMSG_SPACE((datalen))) \
+              || (size_t)CMSG_TOTLEN((msg)) == (size_t)(CMSG_LEN((datalen)))))
+
+/*
+ * Returns the control data member of "msg".
  */
 #if HAVE_CMSGHDR
-/* cast is necessary on AIX, due to buggy headers there?. */
-#define CMSG_CONTROLDATA(msg)	((struct cmsghdr *)((msg).msg_control))
+/*
+ * cast is necessary on AIX, due to buggy headers there?
+ * needs additional testing on AIX, disable for now.
+ */
+#define CMSG_CONTROLDATA(msg)   ((msg).msg_control)
 #else /* !HAVE_CMSGHDR */
-#define CMSG_CONTROLDATA(msg)	((msg).msg_accrights)
-#endif
+#define CMSG_CONTROLDATA(msg)   ((msg).msg_accrights)
+#endif /* HAVE_CMSGHDR */
 
 /*
  * add "object" to "data".  "object" is the object to add to "data" at
  * offset "offset".
  */
 #if HAVE_CMSGHDR
-#define CMSG_ADDOBJECT(object, data, offset) \
-	do \
-		memcpy(CMSG_DATA(data) + (offset), &(object), sizeof(object)); \
-	while (lintnoloop_common_h)
+#define CMSG_ADDOBJECT(object, data, offset)                         \
+   do                                                                \
+      memcpy(CMSG_DATA(data) + (offset), &(object), sizeof(object)); \
+   while (/* CONSTCOND */ 0)
 #else /* !HAVE_CMSGHDR */
-#define CMSG_ADDOBJECT(object, data, offset) \
-	do \
-		memcpy(data + (offset), &(object), sizeof((object))); \
-	while (lintnoloop_common_h)
+#define CMSG_ADDOBJECT(object, data, offset)                         \
+   do                                                                \
+      memcpy(data + (offset), &(object), sizeof((object)));          \
+   while (/* CONSTCOND */ 0)
 #endif /* !HAVE_CMSGHDR */
 
-
 /*
- * get a object from controldata "data".
+ * get a object from control data "data".
  * "object" is the object to fill with data gotten from "data" at offset
  * "offset".
  */
 #if HAVE_CMSGHDR
-#define CMSG_GETOBJECT(object, data, offset) \
-	do \
-		memcpy(&(object), CMSG_DATA((data)) + (offset), sizeof((object))); \
-	while (lintnoloop_common_h)
+#define CMSG_GETOBJECT(object, data, offset)                               \
+   do                                                                      \
+      memcpy(&(object), CMSG_DATA((data)) + (offset), sizeof((object)));   \
+   while (/* CONSTCOND */ 0)
 #else /* !HAVE_CMSGHDR */
-#define CMSG_GETOBJECT(object, data, offset) \
-	do \
-		memcpy(&(object), ((data) + (offset)), sizeof((object))); \
-	while (lintnoloop_common_h)
-#endif /* !HAVE_CMSGHDR */
-
-
-
-/*
- * Sets up "object" for sending a controlmessage of size "size".
- * "controlmem" is the memory the controlmessage is stored in.
- */
-#if HAVE_CMSGHDR
-#define CMSG_SETHDR_SEND(object, controlmem, size) \
-	do { \
-		controlmem->cmsg_level		= SOL_SOCKET; \
-		controlmem->cmsg_type		= SCM_RIGHTS; \
-		controlmem->cmsg_len			= CMSG_LEN(size); \
-		\
-		object.msg_control		= (caddr_t)controlmem; \
-		object.msg_controllen	= controlmem->cmsg_len; \
-	} while (lintnoloop_common_h)
-#else /* !HAVE_CMSGHDR */
-#define CMSG_SETHDR_SEND(object, controlmem, size) \
-	do { \
-		object.msg_accrights		= (caddr_t)controlmem; \
-		object.msg_accrightslen	= (size); \
-	} while (lintnoloop_common_h)
+#define CMSG_GETOBJECT(object, data, offset)                               \
+   do                                                                      \
+      memcpy(&(object), ((data) + (offset)), sizeof((object)));            \
+   while (/* CONSTCOND */ 0)
 #endif /* !HAVE_CMSGHDR */
 
 /*
- * Sets up "object" for receiving a controlmessage of size "size".
- * "controlmem" is the memory set aside for the controlmessage.
+ * Sets up "object" for sending a control message of size "size".
+ * "controlmem" is the memory the control message is stored in.
+ *
+ * CMSG_SPACE() rather than CMSG_LEN() apparently correct value
+ * for msg_controllen.
  */
 #if HAVE_CMSGHDR
-#define CMSG_SETHDR_RECV(object, controlmem, size) \
-	do { \
-		object.msg_control		= (caddr_t)controlmem; \
-		object.msg_controllen	= (size); \
-	} while (lintnoloop_common_h)
+#define CMSG_SETHDR_SEND(object, controlmem, size)                             \
+do {                                                                           \
+   if (size == 0) {                                                            \
+      object.msg_control      = NULL;                                          \
+      object.msg_controllen   = 0;                                             \
+   }                                                                           \
+   else {                                                                      \
+      bzero(controlmem, sizeof(*controlmem));                                  \
+                                                                               \
+      controlmem->cmsg_level  = SOL_SOCKET;                                    \
+      controlmem->cmsg_type   = SCM_RIGHTS;                                    \
+      controlmem->cmsg_len    = CMSG_LEN(size);                                \
+                                                                               \
+      object.msg_control      = (caddr_t)controlmem;                           \
+      object.msg_controllen   = (size) == 0 ? 0 : CMSG_SPACE((size));          \
+  }                                                                            \
+} while (/* CONSTCOND */ 0)
 #else /* !HAVE_CMSGHDR */
-#define CMSG_SETHDR_RECV(object, controlmem, size) \
-	do { \
-		object.msg_accrights		= (caddr_t)controlmem; \
-		object.msg_accrightslen	= (size); \
-	} while (lintnoloop_common_h)
+#define CMSG_SETHDR_SEND(object, controlmem, size)                             \
+do {                                                                           \
+  object.msg_accrights      = (caddr_t)controlmem;                             \
+  object.msg_accrightslen   = (size);                                          \
+} while (/* CONSTCOND */ 0)
 #endif /* !HAVE_CMSGHDR */
 
-
-/* returns length of controldata actually sent. */
+/*
+ * Sets up "object" for receiving a control message of size "size".
+ * "controlmem" is the memory set aside for the control message.
+ */
 #if HAVE_CMSGHDR
-#define CMSG_GETLEN(msg)	((msg).msg_controllen - CMSG_LEN(0))
+#define CMSG_SETHDR_RECV(object, controlmem, size)             \
+   do {                                                        \
+      object.msg_control      = (caddr_t)controlmem;           \
+      object.msg_controllen   = (size);                        \
+   } while (/* CONSTCOND */ 0)
+#else /* !HAVE_CMSGHDR */
+#define CMSG_SETHDR_RECV(object, controlmem, size)             \
+   do {                                                        \
+      object.msg_accrights      = (caddr_t)controlmem;         \
+      object.msg_accrightslen   = (size);                      \
+   } while (/* CONSTCOND */ 0)
+#endif /* !HAVE_CMSGHDR */
+
+/* returns length of control data actually sent. */
+#if HAVE_CMSGHDR
+#define CMSG_GETLEN(msg)   ((msg).msg_controllen - CMSG_LEN(0))
 #else
-#define CMSG_GETLEN(msg)	((msg).msg_accrightslen)
-#endif
+#define CMSG_GETLEN(msg)   ((msg).msg_accrightslen)
+#endif /* HAVE_CMSGHDR */
 
 #if HAVE_CMSGHDR
-#define CMSG_TOTLEN(msg)	((msg).msg_controllen)
+#define CMSG_TOTLEN(msg)   ((msg).msg_controllen)
 #else
-#define CMSG_TOTLEN(msg)	((msg).msg_accrightslen)
-#endif
-
-
-#define INTERNAL_ERROR \
-"an internal error was detected at %s:%d\nvalue = %ld, version = %s"
-
-#define SASSERT(expression)	\
-do {									\
-	if (!(expression))			\
-		SERR(expression);			\
-} while (lintnoloop_common_h)
-
-
-#define SASSERTX(expression)	\
-do {									\
-	if (!(expression))			\
-		SERRX(expression);		\
-} while (lintnoloop_common_h)
-
-
-/*
- * wrappers around err()/errx()/warn()/warnx() for more consistent error
- * messages.
- * "failure" is the value that was wrong and which caused the internal error.
- */
-
-
-#define SERR(failure)				\
-do {										\
-	SWARN(failure);					\
-	abort();								\
-} while (lintnoloop_common_h)
-
-#define SERRX(failure)				\
-do {										\
-	SWARNX(failure);					\
-	abort();								\
-} while (lintnoloop_common_h)
-
-
-#define SWARN(failure)		\
-	swarn(INTERNAL_ERROR,	\
-	__FILE__, __LINE__,	(long int)(failure), rcsid)
-
-#define SWARNX(failure)		\
-	swarnx(INTERNAL_ERROR,	\
-	__FILE__, __LINE__,	(long int)(failure), rcsid)
-
-
-
-#define ERR(failure)									\
-do {														\
-	warn(INTERNAL_ERROR, __FILE__, __LINE__,	\
-	(long int)(failure), rcsid);					\
-	abort();												\
-} while (p)
-
-#define ERRX(failure)								\
-do {														\
-	warnx(INTERNAL_ERROR, __FILE__, __LINE__, \
-	(long int)(failure), rcsid);					\
-	abort();												\
-} while (lintnoloop_common_h)
-
-
-#define WARN(failure) \
-	warn(INTERNAL_ERROR, __FILE__, __LINE__, (long int)(failure), rcsid)
-
-#define WARNX(failure) \
-	warnx(INTERNAL_ERROR, __FILE__, __LINE__, (long int)(failure), rcsid)
-
-#define ERRORMSG(failure) \
-	error_msg(LOG_HIGH, INTERNAL_ERROR, __FILE__, __LINE__, (long int)(failure),\
-	rcsid)
+#define CMSG_TOTLEN(msg)   ((msg).msg_accrightslen)
+#endif /* HAVE_CMSGHDR */
 
 
 /* the size of a UDP header "packet" (no padding) */
-#define PACKETSIZE_UDP(packet) (												\
-	sizeof((packet)->flag) + sizeof((packet)->frag)						\
-	+ sizeof((packet)->host.atype) + sizeof((packet)->host.port)	\
-	+ (ADDRESSIZE_V5(packet)))
+#define HEADERSIZE_UDP(packet) (                                               \
+   sizeof((packet)->flag) + sizeof((packet)->frag)                             \
+   + sizeof((packet)->host.atype) + sizeof((packet)->host.port)                \
+   + (ADDRESSIZE_V5(packet)))
 
 
 /*
  * returns the length of the current address field in socks packet "packet".
  * "packet" can be one of pointer to response_t, request_t or udpheader_t.
  */
-#define ADDRESSIZE(packet) ( \
-	  ((packet)->version == SOCKS_V4 ? \
-	  (ADDRESSIZE_V4(packet)) : (ADDRESSIZE_V5(packet))))
+#define ADDRESSIZE(packet) (                                                   \
+     ((packet)->version == SOCKS_V4 ?                                          \
+     (ADDRESSIZE_V4(packet)) : (ADDRESSIZE_V5(packet))))
 
 /*
- *	version specifics
+ *   version specifics
  */
-#define ADDRESSIZE_V5(packet) (																\
-  (packet)->host.atype == SOCKS_ADDR_IPV4 ?												\
-  sizeof((packet)->host.addr.ipv4) :(packet)->host.atype == SOCKS_ADDR_IPV6 ?	\
-  sizeof((packet)->host.addr.ipv6) : (strlen((packet)->host.addr.domain) + 1))
+#define ADDRESSIZE_V5(packet) (                                                \
+  (packet)->host.atype == SOCKS_ADDR_IPV4 ?                                    \
+        sizeof((packet)->host.addr.ipv4)                                       \
+      : (packet)->host.atype  == (unsigned char)SOCKS_ADDR_IPV6 ?              \
+            sizeof((packet)->host.addr.ipv6.ip)                                \
+          : (strlen((packet)->host.addr.domain) + 1))
 
-#define ADDRESSIZE_V4(packet) ( \
-	(packet)->atype == SOCKS_ADDR_IPV4 ? \
-	sizeof((packet)->addr.ipv4) : (strlen((packet)->addr.host) + 1))
+#define ADDRESSIZE_V4(packet) (                                                \
+   (packet)->atype == SOCKS_ADDR_IPV4 ?                                        \
+   sizeof((packet)->addr.ipv4) : (strlen((packet)->addr.host) + 1))
 
 
 /*
@@ -899,687 +1213,797 @@ do {														\
  * INADDR_NONE and INADDR_ANY may not be part of the range.
  */
 #define FAKEIP_START 0x00000001
-#define FAKEIP_END	0x000000ff
+#define FAKEIP_END   0x000000ff
 
-#define SOCKS_V4					4
-#define SOCKS_V4s					"socks_v4"
-#define SOCKS_V4REPLY_VERSION 0
-#define SOCKS_V5					5
-#define SOCKS_V5s					"socks_v5"
-#define MSPROXY_V2				2
-#define MSPROXY_V2s				"msproxy_v2"
-#define HTTP_V1_0					1
-#define HTTP_V1_0s				"http_v1.0"
+#define PROXY_UPNP                  3
+#define PROXY_UPNPs                 "UPNP"
+#define PROXY_BROADCASTs            "broadcast"    /* subset of upnp. */
+#define PROXY_SOCKS_V4               4
+#define PROXY_SOCKS_V4s              "socks_v4"
+#define PROXY_SOCKS_V4REPLY_VERSION  0
+#define PROXY_SOCKS_V5               5
+#define PROXY_SOCKS_V5s              "socks_v5"
+#define PROXY_DIRECT                 6
+#define PROXY_DIRECTs               "direct"
+#define PROXY_HTTP_10               7
+#define PROXY_HTTP_10s              "HTTP/1.0"
+#define PROXY_HTTP_11               8
+#define PROXY_HTTP_11s              "HTTP/1.1"
 
-/* subnegotiation. */
-#define SOCKS_UNAMEVERSION		1
+/* sub negotiation. */
+#define SOCKS_UNAMEVERSION              1
+#define SOCKS_GSSAPI_VERSION            1
+#define SOCKS_GSSAPI_AUTHENTICATION     1
+#define SOCKS_GSSAPI_ENCRYPTION         2
+#define SOCKS_GSSAPI_PACKET             3
+#define SOCKS_GSSAPI_CLEAR              0
+#define SOCKS_GSSAPI_INTEGRITY          1
+#define SOCKS_GSSAPI_CONFIDENTIALITY    2
+#define SOCKS_GSSAPI_PERMESSAGE         3
 
 /* authentication METHOD values. */
-#define AUTHMETHOD_NOTSET		-1
-#define AUTHMETHOD_NOTSETs		"notset"
-#define AUTHMETHOD_NONE			0
-#define AUTHMETHOD_NONEs		"none"
-#define AUTHMETHOD_GSSAPI		1
-#define AUTHMETHOD_GSSAPIs		"gssapi"
-#define AUTHMETHOD_UNAME		2
-#define AUTHMETHOD_UNAMEs		"username"
+#define AUTHMETHOD_NOTSET      -1
+#define AUTHMETHOD_NOTSETs      "notset"
+#define AUTHMETHOD_NONE         0
+#define AUTHMETHOD_NONEs        "none"
+#define AUTHMETHOD_GSSAPI       1
+#define AUTHMETHOD_GSSAPIs      "gssapi"
+#define AUTHMETHOD_UNAME        2
+#define AUTHMETHOD_UNAMEs      "username"
 
-/* X'03' to X'7F' IANA ASSIGNED						*/
+/* X'03' to X'7F' IANA ASSIGNED                  */
 
-/* X'80' to X'FE' RESERVED FOR PRIVATE METHODS	*/
+/* X'80' to X'FE' RESERVED FOR PRIVATE METHODS   */
 
-#define AUTHMETHOD_NOACCEPT	255
-#define AUTHMETHOD_NOACCEPTs	"no acceptable method"
+#define AUTHMETHOD_NOACCEPT   255
+#define AUTHMETHOD_NOACCEPTs   "<no acceptable method>"
 
-/* not standard methods, must be > AUTHMETHOD_NOACCEPT. */
-#define AUTHMETHOD_RFC931		(AUTHMETHOD_NOACCEPT + 1)
-#define AUTHMETHOD_RFC931s		"rfc931"
+/* non-standard methods.  Must be > AUTHMETHOD_NOACCEPT. */
+#define AUTHMETHOD_RFC931          (AUTHMETHOD_NOACCEPT + 1)
+#define AUTHMETHOD_RFC931s         "rfc931"
 
-#define AUTHMETHOD_PAM			(AUTHMETHOD_RFC931 + 1)
-#define AUTHMETHOD_PAMs			"pam"
+#define AUTHMETHOD_PAM_ANY         (AUTHMETHOD_RFC931 + 1)
+#define AUTHMETHOD_PAM_ANYs        "pam.any"
 
-#define AUTHMETHOD_MAX			(AUTHMETHOD_PAM + 1)
+#define AUTHMETHOD_PAM_ADDRESS     (AUTHMETHOD_PAM_ANY + 1)
+#define AUTHMETHOD_PAM_ADDRESSs    "pam.address"
 
-#define MAXMETHODSTRING			MAX(sizeof(AUTHMETHOD_NONEs),		\
-										MAX(sizeof(AUTHMETHOD_GSSAPIs),	\
-										MAX(sizeof(AUTHMETHOD_UNAMEs),	\
-										MAX(sizeof(AUTHMETHOD_RFC931s),	\
-										sizeof(AUTHMETHOD_PAMs)))))
+#define AUTHMETHOD_PAM_USERNAME    (AUTHMETHOD_PAM_ADDRESS + 1)
+#define AUTHMETHOD_PAM_USERNAMEs   "pam.username"
+
+#define AUTHMETHOD_BSDAUTH     (AUTHMETHOD_PAM_USERNAME + 1)
+#define AUTHMETHOD_BSDAUTHs    "bsdauth"
+
+#define AUTHMETHOD_MAX         (AUTHMETHOD_BSDAUTH)
+
+#define MAXMETHODSTRING      (MAX(sizeof(AUTHMETHOD_NONEs),             \
+                              MAX(sizeof(AUTHMETHOD_GSSAPIs),           \
+                              MAX(sizeof(AUTHMETHOD_UNAMEs),            \
+                              MAX(sizeof(AUTHMETHOD_RFC931s),           \
+                              MAX(sizeof(AUTHMETHOD_PAM_ANYs),          \
+                              MAX(sizeof(AUTHMETHOD_PAM_ADDRESSs),      \
+                              MAX(sizeof(AUTHMETHOD_PAM_USERNAMEs),     \
+                              sizeof(AUTHMETHOD_BSDAUTHs)))))))))
 
 /* number of supported methods. */
-#define MAXMETHOD					1 /* NONE		*/	\
-									 + 1 /* UNAME		*/	\
-									 + 1 /* RFC931		*/	\
-									 + 1 /* RFC931		*/
+#define METHODS_KNOWN  (  1  /* NONE      */   \
+                        + 1  /* GSSAPI    */   \
+                        + 1  /* UNAME     */   \
+                        + 1  /* RFC931    */   \
+                        + 1  /* PAM       */   \
+                        + 1) /* BSDAUTH   */
+
+#define MAXMETHODS     (255)  /*
+                               * max number of methods we can be offered, and
+                               * potentially support.
+                               */
 
 /*
  *  Response commands/codes
  */
-#define SOCKS_CONNECT				1
-#define SOCKS_CONNECTs				"connect"
-#define SOCKS_BIND					2
-#define SOCKS_BINDs					"bind"
+#define SOCKS_CONNECT            1
+#define SOCKS_CONNECTs           "connect"
+#define SOCKS_BIND               2
+#define SOCKS_BINDs              "bind"
 #define SOCKS_UDPASSOCIATE       3
-#define SOCKS_UDPASSOCIATEs		"udpassociate"
+#define SOCKS_UDPASSOCIATEs      "udpassociate"
 
 /* pseudo commands */
 
-#define SOCKS_COMMANDEND			0xff
+#define SOCKS_COMMANDEND         0xff
 
-#define SOCKS_BINDREPLY				(SOCKS_COMMANDEND + 1)
-#define SOCKS_BINDREPLYs			"bindreply"
+#define SOCKS_BINDREPLY          (SOCKS_COMMANDEND + 1)
+#define SOCKS_BINDREPLYs         "bindreply"
 
-#define SOCKS_UDPREPLY				(SOCKS_BINDREPLY + 1)
-#define SOCKS_UDPREPLYs				"udpreply"
+#define SOCKS_UDPREPLY           (SOCKS_BINDREPLY + 1)
+#define SOCKS_UDPREPLYs          "udpreply"
 
 /* misc. stuff */
-#define SOCKS_ACCEPT					(SOCKS_UDPREPLY + 1)
-#define SOCKS_ACCEPTs				"accept"
+#define SOCKS_ACCEPT             (SOCKS_UDPREPLY + 1)
+#define SOCKS_ACCEPTs            "accept"
 
-#define SOCKS_DISCONNECT			(SOCKS_ACCEPT + 1)
-#define SOCKS_DISCONNECTs			"disconnect"
+#define SOCKS_DISCONNECT         (SOCKS_ACCEPT + 1)
+#define SOCKS_DISCONNECTs        "disconnect"
 
-#define SOCKS_UNKNOWN				(SOCKS_DISCONNECT + 1)
-#define SOCKS_UNKNOWNs				"unknown"
+#define SOCKS_BOUNCETO            (SOCKS_DISCONNECT + 1)
+#define SOCKS_BOUNCETOs           "bounce-to"
 
+#define SOCKS_HOSTID              (SOCKS_BOUNCETO + 1)
+#define SOCKS_HOSTIDs             "hostid"
 
-/* address types */
-#define SOCKS_ADDR_IPV4			0x01
-/* not a socks constant but put here for convenience. */
-#define SOCKS_ADDR_IFNAME		0x02
-#define SOCKS_ADDR_DOMAIN		0x03
-#define SOCKS_ADDR_IPV6       0x04
+#define SOCKS_UNKNOWN            (SOCKS_HOSTID + 1)
+#define SOCKS_UNKNOWNs           "unknown"
 
 
 /* reply field values */
-#define SOCKS_SUCCESS			0x00
-#define SOCKS_FAILURE			0x01
-#define SOCKS_NOTALLOWED		0x02
-#define SOCKS_NETUNREACH		0x03
-#define SOCKS_HOSTUNREACH		0x04
-#define SOCKS_CONNREFUSED		0x05
-#define SOCKS_TTLEXPIRED		0x06
-#define SOCKS_CMD_UNSUPP		0x07
-#define SOCKS_ADDR_UNSUPP		0x08
-#define SOCKS_INVALID_ADDRESS 0x09
+#define SOCKS_SUCCESS         0x00
+#define SOCKS_FAILURE         0x01
+#define SOCKS_NOTALLOWED      0x02
+#define SOCKS_NETUNREACH      0x03
+#define SOCKS_HOSTUNREACH     0x04
+#define SOCKS_CONNREFUSED     0x05
+#define SOCKS_TTLEXPIRED      0x06
+#define SOCKS_CMD_UNSUPP      0x07
+#define SOCKS_ADDR_UNSUPP     0x08
 
 /* version 4 codes. */
-#define SOCKSV4_SUCCESS			90
-#define SOCKSV4_FAIL				91
-#define SOCKSV4_NO_IDENTD		92
-#define SOCKSV4_BAD_ID			93
+#define SOCKSV4_SUCCESS        90
+#define SOCKSV4_FAIL           91
+#define SOCKSV4_NO_IDENTD      92
+#define SOCKSV4_BAD_ID         93
 
 /* http stuff. */
-#define HTTP_SUCCESS				200
+#define HTTP_SUCCESS           200
+#define HTTP_NOTALLOWED        401
+#define HTTP_FORBIDDEN         403
+#define HTTP_PROXYAUTHREQUIRED 407
+#define HTTP_HOSTUNREACH       504
+#define HTTP_FAILURE           501
+#define SOCKD_HTTP_PORT        80
 
+/* upnp stuff. */
+#define UPNP_DISCOVERYTIME_MS              (1000)
+#define DEFAULT_SSDP_BROADCAST_IPV4ADDR    "239.255.255.250"
+#define DEFAULT_SSDP_PORT                  (1900)
 
-#define MSPROXY_PINGINTERVAL	(6 * 60)
+/* return codes from UPNP_GetValidIGD(). */
+#define UPNP_NO_IGD           (0)
+#define UPNP_CONNECTED_IGD    (1)
+#define UPNP_DISCONNECTED_IGD (2)
+#define UPNP_UNKNOWN_DEVICE   (3)
 
-#define MSPROXY_SUCCESS			0
-#define MSPROXY_FAILURE			1
-#define MSPROXY_NOTALLOWED		2
-
-#define MSPROXY_MINLENGTH		172			/* minimum length of packet.				*/
-#define MSPROXY_VERSION			0x00010200	/* perhaps?									*/
-
-/* errors */
-#define MSPROXY_ADDRINUSE				0x0701
-#define MSPROXY_BIND_AUTHFAILED		0x0804	/* auth failed for connect.	*/
-#define MSPROXY_CONNECT_AUTHFAILED	0x081e	/* auth failed for bind.		*/
-#define MSPROXY_CONNREFUSED			0x4		/* low 12 bits seem to vary.	*/
-
-/*
- * Server seems to ignore low-order bits of a 0x47?? command, so take them
- * for our own use.
- */
-#define MSPROXY_HELLO				0x0500	/* packet 1 from client.				*/
-#define MSPROXY_HELLO_ACK			0x1000	/* packet 1 from server.				*/
-
-#define MSPROXY_USERINFO			0x1000	/* packet 2 from client.				*/
-#define MSPROXY_USERINFO_ACK		0x0400	/* packet 2 from server.				*/
-
-#define MSPROXY_SOMETHING			0x4700	/* packet 3 from client.				*/
-#define MSPROXY_SOMETHING_1_ACK	0x4714	/* packet 3 from server.				*/
-
-#define MSPROXY_SOMETHING_2		0x4701	/* packet 4 from client.				*/
-#define MSPROXY_SOMETHING_2_ACK	0x4715	/* packet 4 from server, high 8 bits
-															seem to vary.							*/
-#define MSPROXY_SOMETHING_2_ACK2	0x4716	/* could be this too... dunno.		*/
-
-#define MSPROXY_RESOLVE				0x070d	/* resolve request from client.		*/
-#define MSPROXY_RESOLVE_ACK		0x070f	/* resolved info from server.			*/
-
-#define MSPROXY_BIND					0x0704	/* bind request.							*/
-#define MSPROXY_BIND_ACK			0x0706	/* bind request accepted.				*/
-
-#define MSPROXY_BIND2				0x0707	/* dunno.									*/
-#define MSPROXY_BIND2_ACK			0x0708	/* dunno.									*/
-
-#define MSPROXY_BIND2				0x0707	/* dunno.									*/
-#define MSPROXY_BIND2_ACK			0x0708	/* dunno.									*/
-
-#define MSPROXY_LISTEN				0x0406	/* listen() performed(?)				*/
-
-#define MSPROXY_BINDINFO			0x0709	/* info about client server accepted*/
-
-#define MSPROXY_BINDINFO_ACK		0x070a	/* we got the info(?)					*/
-
-#define MSPROXY_CONNECT				0x071e	/* connect request.						*/
-#define MSPROXY_CONNECT_ACK		0x0703	/* connect request accepted.			*/
-
-#define MSPROXY_UDPASSOCIATE		0x0705	/* UDP associate request.				*/
-#define MSPROXY_UDPASSOCIATE_ACK	0x0706	/* UDP associate request accepted.	*/
-
-#define MSPROXY_CONNECTED			0x042c	/* client connected to server?		*/
-
-#define MSPROXY_SESSIONEND			0x251e	/* maybe...									*/
-
+#define UPNP_SUCCESS          (1)
+#define UPNP_FAILURE          (2)
 
 /* flag _bits_ */
-#define SOCKS_INTERFACEREQUEST	0x01
-#define SOCKS_USECLIENTPORT		0x04
+#define SOCKS_INTERFACEREQUEST   0x01
+#define SOCKS_USECLIENTPORT      0x04
 
 /* subcommands */
-#define SOCKS_INTERFACEDATA		0x01
+#define SOCKS_INTERFACEDATA      0x01
 
-
-#define SOCKS_TCP			1
-#define SOCKS_UDP			2
-
-#define SOCKS_RECV		0
-#define SOCKS_SEND		1
+#define SOCKS_RECV      0
+#define SOCKS_SEND      1
 
 /* offsets into authentication packet */
-#define AUTH_VERSION		0	/* version of method packet.								*/
+#define AUTH_VERSION         (0)   /* version of method packet.               */
 
 /* request */
-#define AUTH_NMETHODS	1	/* number of methods to offer.							*/
-#define AUTH_METHODS		2	/* start of methods to offer.								*/
+#define AUTH_NMETHODS        (1)   /* offset of number of methods offered.    */
+#define AUTH_FIRSTMETHOD     (2)   /* offset of first method offered.         */
 
 /* reply */
-#define AUTH_VERSION		0	/* offset for version in reply.							*/
-#define AUTH_METHOD		1	/* offset for selected method in reply.				*/
+#define AUTH_SELECTEDMETHOD  (1)  /* offset for selected method in response. */
 
 /* offsets into username/password negotiation packet */
-#define UNAME_VERSION	0
-#define UNAME_STATUS		1
+#define UNAME_VERSION      (0)
+#define UNAME_STATUS       (1)
 
-/* XXX no IPv6 support currently. */
-#define SOCKS_IPV6_ALEN 16
+
+/* uname status values. */
+#define UNAME_STATUS_ISOK    (0)
+#define UNAME_STATUS_ISNOK   (1)
+
+/* offsets into gssapi negotiation packet */
+#define GSSAPI_VERSION          0
+#define GSSAPI_STATUS           1
+#define GSSAPI_TOKEN_LENGTH     2
+#define GSSAPI_TOKEN            4
+
+
+#define GSSAPI_CLEAR            0
+#define GSSAPI_INTEGRITY        1
+#define GSSAPI_CONFIDENTIALITY  2
+
+#define GSS_REQ_INT             0
+#define GSS_REQ_CONF            1
+
+#define SOCKS_IPV6_ALEN          16
+#define IPV6_NETMASKBITS         (128)
+#define IPV4_NETMASKBITS         (32)
+#define IPV4_FULLNETMASK         (0xffffffff)
+
+#define IP6_ELEMENTS(ip6)     \
+(ip6)->s6_addr[0],            \
+(ip6)->s6_addr[1],            \
+(ip6)->s6_addr[2],            \
+(ip6)->s6_addr[3],            \
+(ip6)->s6_addr[4],            \
+(ip6)->s6_addr[5],            \
+(ip6)->s6_addr[6],            \
+(ip6)->s6_addr[7],            \
+(ip6)->s6_addr[8],            \
+(ip6)->s6_addr[9],            \
+(ip6)->s6_addr[10],           \
+(ip6)->s6_addr[11],           \
+(ip6)->s6_addr[12],           \
+(ip6)->s6_addr[13],           \
+(ip6)->s6_addr[14],           \
+(ip6)->s6_addr[15]
+
+#define IP6_FMTSTR "%02x:%02x:%02x:%02x:%02x:%02x:%02x:%02x:%02x:%02x:%02x:%02x:%02x:%02x:%02x:%02x"
+
+#define BINDEXTENSION_IPADDR     (0xffffffff)
+
+
+
+/*
+ * hostid related defines
+ */
+
+/* socket option hostid types */
+#define SOCKS_HOSTID_TYPE_NONE 0
+#define SOCKS_HOSTID_TYPE_TCP_IPA 1
+
+#if SOCKS_HOSTID_TYPE == SOCKS_HOSTID_TYPE_NONE
+#define HAVE_SOCKS_HOSTID (0)
+#else
+#define HAVE_SOCKS_HOSTID (1)
+#endif
+
+/* supported commands/command strings for parsing */
+#define SOCKS_HOSTID_NONE 0
+#define SOCKS_HOSTID_NONE_SYMNAME "none"
+#define SOCKS_HOSTID_PASS 1
+#define SOCKS_HOSTID_PASS_SYMNAME "pass"
+#define SOCKS_HOSTID_ADDCLIENT 2
+#define SOCKS_HOSTID_ADDCLIENT_SYMNAME "add-client"
+#define SOCKS_HOSTID_SETCLIENT 3
+#define SOCKS_HOSTID_SETCLIENT_SYMNAME "set-client"
+
+typedef enum { NONESETIF = 0, INTERNALIF, EXTERNALIF } interfaceside_t;
 
 enum operator_t { none = 0, eq, neq, ge, le, gt, lt, range };
+typedef enum { dontcare, istrue, isfalse } value_t;
+typedef enum { username, udpreplies, tcpreplies, replies } methodinfo_t;
+typedef enum { softlimit, hardlimit } limittype_t;
+typedef enum { type_global, type_rule, type_route } opttype_t;
 
 
-struct logtype_t {
-	int				type;			/* type of logging (where to).						*/
-	FILE				**fpv;		/* if logging is to file, this is the open file.*/
-	char				**fnamev;	/* if logging is to file, name of file.			*/
-	size_t			fpc;			/* number of files.										*/
-	int				*fplockv;	/* locking of logfiles.									*/
-	int				facility;	/* if logging to syslog, this is the facility.	*/
-	const char		*facilityname;	/* if logging to syslog, name of facility.	*/ };
+#define SOCKS_ADDR_NOTSET   (0)
+#define SOCKS_ADDR_IPV4     (1)
+#define SOCKS_ADDR_IFNAME   (2)
+#define SOCKS_ADDR_DOMAIN   (3)
+#define SOCKS_ADDR_IPV6     (4)
+#define SOCKS_ADDR_URL      (5)
+#define SOCKS_ADDR_IPVANY   (6) /* for 0/0 address matching ipv4 and ipv6. */
+
+typedef enum { object_none = 0,     /* no object set. */
+               object_sockaddr,
+               object_sockshost,
+               object_crule,
+               object_hrule,
+               object_srule,
+               object_route,
+               object_monitor } objecttype_t;
+
+
+#define MAXLOGLEVELLEN           (sizeof("warning"))
+typedef struct {
+   const char name[MAXLOGLEVELLEN];
+   const int  value;
+} loglevel_t;
+
+
+typedef struct {
+   /*
+    * if we mark a route/proxy server as bad, how many seconds to wait
+    * until we expire the badmarking so it will be tried again for new
+    * connections.  A value of zero means never.
+    */
+   time_t badexpire;
+
+   /*
+    * how many times a route can fail before being marked as bad.
+    * A value of zero means it will never be marked as bad.
+    */
+   size_t maxfail;
+} routeoptions_t;
+
+typedef struct {
+   int           type;        /* type of logging (where to).                  */
+
+   char          **fnamev;    /* name of file, if logging to file.            */
+   unsigned char *createdv;   /* did we create this logfile ourselves?        */
+   int           *filenov;    /* if logging is to file, the file descriptor.  */
+   size_t        filenoc;     /* number of files.                             */
+
+   int           facility;    /* if logging to syslog, this is the facility.  */
+   char          facilityname[MAXFACILITYNAMELEN]; /* facilityname.           */
+} logtype_t;
 
 
 
 /* extensions supported by us. */
-struct extension_t {
-	unsigned bind:1;		/* use bind extension? */
-	unsigned :0;
-};
+typedef struct {
+   unsigned char bind;      /* use bind extension? */
+} extension_t;
 
+typedef enum { TIMEOUT_NOTSET = 0,
+               TIMEOUT_NEGOTIATE,
+               TIMEOUT_CONNECT,
+               TIMEOUT_IO,
+               TIMEOUT_TCP_FIN_WAIT
+} timeouttype_t;
 
+typedef struct {
+   /*
+    * type should match the struct timeval.tv_sec used by select(2).
+    * POSIX says it's time_t.
+    */
 
-/* the address part of a socks packet */
-union socksaddr_t {
-	struct in_addr ipv4;
-	char				ipv6[SOCKS_IPV6_ALEN];
-	char				domain[MAXHOSTNAMELEN]; /* _always_ stored as C string.		*/
-};
+   time_t connect;   /* how long to wait before giving up connect(2). */
+#if !SOCKS_CLIENT
+   time_t negotiate; /* how long negotiation can last.                */
+   time_t tcpio;     /* how long session can last without i/o.        */
+   time_t udpio;     /* how long session can last without i/o.        */
 
-/* the hostspecific part of misc. things */
-struct sockshost_t {
-	unsigned char			atype;
-	union socksaddr_t		addr;
-	in_port_t				port;
-};
-
-
-
-struct msproxy_request_t {
-	char						username[MAXNAMELEN];
-	char						unknown[MAXNAMELEN];
-	char						executable[MAXNAMELEN];
-	char						clienthost[MAXHOSTNAMELEN];
-
-	int32_t					clientid;			/* 1-4										*/
-	int32_t					magic25;				/* 5-8										*/
-	int32_t					serverid;			/* 9-12										*/
-	unsigned char			serverack;			/* 13: ack of last server packet		*/
-	char						pad10[3];			/* 14-16										*/
-	unsigned char			sequence;			/* 17: sequence # of this packet.	*/
-	char						pad11[7];			/* 18-24										*/
-	char						RWSP[4];				/* 25-28: 0x52,0x57,0x53,0x50			*/
-	char						pad15[8];			/* 29-36										*/
-	int16_t					command;				/* 37-38										*/
-
-	/* packet specifics start at 39. */
-	union {
-		struct {
-			char				pad1[18];			/* 39-56										*/
-			int16_t			magic3;				/* 57-58										*/
-			char           pad3[114];			/* 59-172									*/
-			int16_t			magic5;				/* 173-174: 0x4b, 0x00					*/
-			char				pad5[2];				/* 175-176									*/
-			int16_t			magic10;				/* 177-178: 0x14, 0x00					*/
-			char				pad6[2];				/* 179-180									*/
-			int16_t			magic15;				/* 181-182: 0x04, 0x00					*/
-			char				pad10[6];			/* 183-188									*/
-			int16_t			magic20;				/* 189-190: 0x57, 0x04					*/
-			int16_t			magic25;				/* 191-192: 0x00, 0x04					*/
-			int16_t			magic30;				/* 193-194: 0x01, 0x00					*/
-			char				pad20[2];			/* 195-196: 0x4a, 0x02					*/
-			int16_t			magic35;				/* 197-198: 0x4a, 0x02					*/
-			char				pad30[10];			/* 199-208									*/
-			int16_t			magic40;				/* 209-210: 0x30, 0x00					*/
-			char				pad40[2];			/* 211-212									*/
-			int16_t			magic45;				/* 213-214: 0x44, 0x00					*/
-			char				pad45[2];			/* 215-216									*/
-			int16_t			magic50;				/* 217-218: 0x39, 0x00					*/
-			char				pad50[2];			/* 219-220									*/
-		} _1;
-
-		struct {
-			char				pad1[18];			/* 39-56										*/
-			int16_t			magic3;				/* 57-58										*/
-			char           pad3[114];			/* 59-172									*/
-			int16_t			magic5;				/* 173-174: 0x00, 0x4b					*/
-			char				pad5[2];				/* 175-176									*/
-			int16_t			magic10;				/* 177-178: 0x14, 0x00					*/
-			char				pad10[2];			/* 179-180									*/
-			int16_t			magic15;				/* 181-182: 0x04, 0x00					*/
-			char				pad15[6];			/* 183-188									*/
-			int16_t			magic20;				/* 189-190: 0x57, 0x04					*/
-			int16_t			magic25;				/* 191-192: 0x00, 0x04					*/
-			int16_t			magic30;				/* 193-194: 0x01, 0x00					*/
-			char				pad20[2];			/* 195-196									*/
-			int16_t			magic35;				/* 197-198: 0x04, 0x00					*/
-			char				pad25[10];			/* 199-208									*/
-			int16_t			magic50;				/* 209-210: 0x30, 0x00					*/
-			char				pad50[2];			/* 211-212									*/
-			int16_t			magic55;				/* 213-214: 0x44, 0x00					*/
-			char				pad55[2];			/* 215-216									*/
-			int16_t			magic60;				/* 217-218: 0x39, 0x00					*/
-		} _2;
-
-		struct {
-			char				pad1[4];				/* 39-42										*/
-			int16_t			magic2;				/* 43-44										*/
-			char				pad10[12];			/* 45-56										*/
-			in_addr_t		bindaddr;			/* 57-60: address to bind.				*/
-			in_port_t		bindport;			/* 61-62: port to bind.					*/
-			char           pad15[2];			/* 63-64										*/
-			int16_t			magic3;				/* 65-66										*/
-			in_port_t		boundport;			/* 67-68										*/
-			char           pad20[104];			/* 69-172									*/
-			char				NTLMSSP[sizeof("NTLMSSP")];	/* 173-180: "NTLMSSP"	*/
-			int16_t			magic5;				/* 181-182: 0x01, 0x00					*/
-			char				pad25[2];			/* 183-184									*/
-			int16_t			magic10;				/* 185-186: 0x96, 0x82					*/
-			int16_t			magic15;				/* 187-188: 0x08, 0x00					*/
-			int16_t			magic20;				/* 189-190: 0x28, 0x00					*/
-			char				pad30[2];			/* 191-192									*/
-			int16_t			magic25;				/* 193-194: 0x96, 0x82					*/
-			int16_t			magic30;				/* 195-196: 0x01, 0x00					*/
-			char				pad40[12];			/* 197-208									*/
-			int16_t			magic50;				/* 209-210: 0x30, 0x00					*/
-			char				pad50[6];			/* 211-216									*/
-			int16_t			magic55;				/* 217-218: 0x30, 0x00					*/
-			char				pad55[2];			/* 219-220									*/
-		} _3;
-
-		struct {
-			char				pad1[4];				/* 39-42										*/
-			int16_t			magic1;				/* 43-44										*/
-			int32_t			magic2;				/* 45-48										*/
-			char				pad2[8];				/* 49-56										*/
-			int16_t			magic3;				/* 57-58										*/
-			char				pad3[6];				/* 59-64										*/
-			int16_t			magic4;				/* 65-66										*/
-			in_port_t		boundport;			/* 67-68										*/
-			char           pad4[104];			/* 69-172									*/
-			char				NTLMSSP[sizeof("NTLMSSP")];	/* 173-180: "NTLMSSP"	*/
-			int16_t			magic5;				/* 181-182: 0x03, 0x00					*/
-			char				pad5[2];				/* 183-184									*/
-			int16_t			magic10;				/* 185-186: 0x18, 0x00					*/
-			int16_t			magic15;				/* 187-188: 0x18, 0x00					*/
-			int16_t			magic20;				/* 189-190: 0x49, 0x00					*/
-			char				pad10[6];			/* 191-196									*/
-			int16_t			magic30;				/* 197-198: 0x61, 0x00					*/
-			char				pad15[2];			/* 199-200									*/
-			int16_t			magic35;				/* 201-202: 0x08, 0x00					*/
-			int16_t			magic40;				/* 203-204: 0x08, 0x00					*/
-			int16_t			magic45;				/* 205-206: 0x34, 0x00					*/
-			char				pad20[2];			/* 207-208									*/
-			int16_t			magic50;				/* 209-210: 0x07, 0x00					*/
-			int16_t			magic55;				/* 211-212: 0x07, 0x00					*/
-			int16_t			magic60;				/* 213-214: 0x3c, 0x00					*/
-			char				pad25[2];			/* 215-216									*/
-			int16_t			magic65;				/* 217-218: 0x06, 0x00					*/
-			int16_t			magic70;				/* 219-220: 0x06, 0x00					*/
-			int16_t			magic75;				/* 221-222: 0x43, 0x00					*/
-		} _4;
-
-		struct {
-			unsigned char	hostlength;			/* length of host, including NUL.	*/
-			char				pad1[17];			/* 39-56										*/
-			char				*host;				/* 57-...									*/
-		} resolve;
-
-		struct {
-			int16_t			magic1;				/* 39-40										*/
-			char				pad1[4];				/* 41-45										*/
-			int32_t			magic3;				/* 45-48										*/
-			char				pad5[8];				/* 48-56										*/
-			int16_t			magic6;				/* 57-58: 0x0200							*/
-			in_port_t		destport;			/* 59-60										*/
-			in_addr_t		destaddr;			/* 61-64										*/
-			char				pad10[4];			/* 65-68										*/
-			int16_t			magic10;				/* 69-70										*/
-			char				pad15[2];			/* 71-72										*/
-			in_port_t		srcport;				/* 73-74: port client connects from	*/
-			char				pad20[82];			/* 75-156									*/
-		} _5;
-
-		struct {
-			int16_t			magic1;				/* 39-40										*/
-			char				pad5[2];				/* 41-42										*/
-			int16_t			magic5;				/* 43-44										*/
-			int32_t			magic10;				/* 45-48										*/
-			char				pad10[2];			/* 49-50										*/
-			int16_t			magic15;				/* 51-52										*/
-			int32_t			magic16;				/* 53-56										*/
-			int16_t			magic20;				/* 57-58										*/
-			in_port_t		clientport;			/* 59-60: forwarded port.				*/
-			in_addr_t		clientaddr;			/* 61-64: forwarded address.			*/
-			int32_t			magic30;				/* 65-68										*/
-			int32_t			magic35;				/* 69-72										*/
-			in_port_t		serverport;			/* 73-74: port server will connect
-														 *	       to us from.
-														*/
-			in_port_t		srcport;				/* 75-76: connect request; port used
-														 *			 on client behalf.
-														*/
-			in_port_t		boundport;			/* 77-78: bind request; port used
-														 *		 on client behalf.
-														*/
-			in_addr_t		boundaddr;			/* 79-82: addr used on client behalf*/
-			char				pad30[90];			/* 83-172									*/
-		} _6;
-
-	} packet;
-};
-
-struct msproxy_response_t {
-	int32_t					packetid;			/* 1-4										*/
-	int32_t					magic5;				/* 5-8										*/
-	int32_t              serverid;			/* 9-12										*/
-	char						clientack;			/* 13: ack of last client packet.	*/
-	char						pad5[3];				/* 14-16										*/
-	unsigned char			sequence;			/* 17: sequence # of this packet.	*/
-	char						pad10[7];			/* 18-24										*/
-	char						RWSP[4];				/* 25-28: 0x52,0x57,0x53,0x50			*/
-	char						pad15[8];			/* 29-36										*/
-	int16_t					command;				/* 37-38										*/
-
-	union {
-		struct {
-			char				pad5[18];			/* 39-56										*/
-			int16_t			magic20;				/* 57-58: 0x02, 0x00						*/
-			char				pad10[6];			/* 59-64										*/
-			int16_t			magic30;				/* 65-66: 0x74, 0x01						*/
-			char				pad15[2];			/* 67-68										*/
-			int16_t			magic35;				/* 69-70: 0x0c, 0x00						*/
-			char				pad20[6];			/* 71-76										*/
-			int16_t			magic50;				/* 77-78: 0x04, 0x00						*/
-			char				pad30[6];			/* 79-84										*/
-			int16_t			magic60;				/* 85-86: 0x65, 0x05						*/
-			char				pad35[2];			/* 87-88										*/
-			int16_t			magic65;				/* 89-90: 0x02, 0x00						*/
-			char				pad40[8];			/* 91-98										*/
-			in_port_t		udpport;				/* 99-100									*/
-			in_addr_t		udpaddr;				/* 101-104									*/
-		} _1;
-
-		struct {
-			char				pad5[18];			/* 39-56										*/
-			int16_t			magic5;				/* 57-58: 0x01, 0x00						*/
-		} _2;
-
-		struct {
-			char				pad1[6];				/* 39-44										*/
-			int32_t			magic10;				/* 45-48										*/
-			char				pad3[10];			/* 49-58										*/
-			in_port_t		boundport;			/* 59-60: port server bound for us.	*/
-			in_addr_t		boundaddr;			/* 61-64: addr server bound for us.	*/
-			char				pad10[4];			/* 65-68										*/
-			int16_t			magic15;				/* 69-70										*/
-			char				pad15[102];			/* 70-172									*/
-			char				NTLMSSP[sizeof("NTLMSSP")];	/* 173-180: "NTLMSSP"	*/
-			int16_t			magic50;				/* 181-182: 0x02, 0x00					*/
-			char				pad50[2];			/* 183-184									*/
-			int16_t			magic55;				/* 185-186: 0x08, 0x00					*/
-			int16_t			magic60;				/* 187-188: 0x08, 0x00					*/
-			int16_t			magic65;				/* 189-190: 0x28, 0x00					*/
-			char				pad60[2];			/* 191-192									*/
-			int16_t			magic70;				/* 193-194: 0x96, 0x82					*/
-			int16_t			magic75;				/* 195-196: 0x01, 0x00					*/
-			char				pad70[16];			/* 197-212									*/
-			char				ntdomain[257];		/* 213-EOP									*/
-		} _3;
-
-		struct {
-			char				pad5[134];			/* 39-172									*/
-		} _4;
-
-		struct {
-			unsigned char	addroffset;			/* 39: weird, probably wrong.			*/
-			char				pad5[13];			/* 40-52										*/
-			in_addr_t		hostaddr;			/* ?-?+4										*/
-		} resolve;
-
-		struct {
-			int16_t			magic1;				/* 39-40										*/
-			char				pad5[18];			/* 41-58										*/
-			in_port_t		clientport;			/* 59-60: forwarded port.				*/
-			in_addr_t		clientaddr;			/* 61-64: forwarded address.			*/
-			int32_t			magic10;				/* 65-68										*/
-			int32_t			magic15;				/* 69-72										*/
-			in_port_t		serverport;			/* 73-74: port server will connect
-														 *	       to us from.
-														*/
-			in_port_t		srcport;				/* 75-76: connect request; port used
-														 *			 on client behalf.
-														*/
-			in_port_t		boundport;			/* 77-78: bind request; port used
-														 *			 on client behalf.
-														*/
-			in_addr_t		boundaddr;			/* 79-82: addr used on client behalf*/
-			char				pad10[90];			/* 83-172									*/
-		} _5;
-	} packet;
-};
-
-struct request_t {
-	unsigned char			version;
-	unsigned char			command;
-	unsigned char			flag;
-	struct sockshost_t	host;
-	struct authmethod_t	*auth;	/* pointer to level above. */
-};
-
-
-struct response_t {
-	unsigned char			version;
-	unsigned char			reply;
-	unsigned char			flag;
-	struct sockshost_t	host;
-	struct authmethod_t	*auth;	/* pointer to level above. */
-};
-
-/* encapsulation for UDP packets. */
-struct udpheader_t {
-	unsigned char			flag[2];
-	unsigned char			frag;
-	struct sockshost_t	host;
-};
-
-
-/* method username */
-struct authmethod_uname_t {
-	unsigned char	version;
-	unsigned char	name[MAXNAMELEN];
-	unsigned char	password[MAXPWLEN];
-};
+   time_t tcp_fin_wait; /* how long to wait after one end closes.     */
+#endif /* !SOCKS_CLIENT */
+} timeout_t;
 
 /* method rfc931 */
-struct authmethod_rfc931_t {
-	unsigned char	name[MAXNAMELEN];
-};
+typedef struct {
+   unsigned char   name[MAXNAMELEN];
+} authmethod_rfc931_t;
 
 /* method pam. */
-struct authmethod_pam_t {
-	char				servicename[MAXNAMELEN];	/* servicename to use with pam.	*/
-	unsigned char	name[MAXNAMELEN];
-	unsigned char	password[MAXPWLEN];
-};
+typedef struct {
+   char            servicename[MAXNAMELEN];   /* servicename to use with pam. */
+   unsigned char   name[MAXNAMELEN];
+   unsigned char   password[MAXPWLEN];
+} authmethod_pam_t;
+
+/* method bsdauth. */
+typedef struct {
+   char            style[MAXNAMELEN];   /* style to use. */
+   unsigned char   name[MAXNAMELEN];
+   unsigned char   password[MAXPWLEN];
+} authmethod_bsd_t;
+
+/* method username */
+typedef struct {
+   unsigned char   version;
+   unsigned char   name[MAXNAMELEN];
+   unsigned char   password[MAXPWLEN];
+} authmethod_uname_t;
+
+#if HAVE_GSSAPI
+typedef struct {
+       unsigned char nec;
+       unsigned char clear;
+       unsigned char integrity;
+       unsigned char confidentiality;
+       unsigned char permessage;
+} gssapi_enc_t;
+
+#ifndef BUFSIZ
+#define BUFSIZ 1024
+#endif /* !BUFSIZ */
+typedef struct {
+    int            read;
+    int            rpos;
+    int            wpos;
+    int            isbuffered;
+    unsigned char  rbuffer[GSSAPI_HLEN + MAXGSSAPITOKENLEN];
+    unsigned char  wbuffer[BUFSIZ];
+} gssapi_buf_t;
+
+typedef struct {
+   int                 wrap;        /* gssapi-wrapped, or clear?              */
+   gss_ctx_id_t        id;          /* gssapi context id.                     */
+   int                 protection;  /* selected protection mechanism.         */
+
+   OM_uint32           maxgssdata;  /* max length of gss data pre-encoding.   */
+   size_t              gssoverhead; /*
+                                     * overhead in bytes of gssapi given the
+                                     * current mechanism/context/etc.
+                                     * Don't know what the practical max
+                                     * actually is, so this contains the
+                                     * max overhead experienced so far.
+                                     */
+} gssapi_state_t;
+
+/* method gssapi */
+typedef struct {
+       char           servicename[MAXNAMELEN];
+       char           keytab[MAXNAMELEN];
+       unsigned char  name[MAXNAMELEN];
+       gssapi_enc_t   encryption;                  /* encryption details      */
+       gssapi_state_t state;                       /* gssapi state details    */
+} authmethod_gssapi_t;
+
+#endif /* HAVE_GSSAPI */
+
 
 /* this must be big enough to hold a complete method request. */
-struct authmethod_t {
-	int						method;					/* method in use.						*/
-	int						methodv[MAXMETHOD];	/* methods somewhere matched.		*/
-	size_t					methodc;					/* number of methods matched.		*/
-	int						badmethodv[MAXMETHOD];/* methods not matched.			*/
-	size_t					badmethodc;				/* number of methods not matched.*/
+typedef struct {
+   int                  method;                /* method in use.              */
 
-	union {
-		struct authmethod_uname_t	uname;
-		struct authmethod_rfc931_t	rfc931;
-		struct authmethod_pam_t		pam;
-	} mdata;
+   /*
+    * Methods authenticated at some stage of the process.
+    */
+   int                  methodv[METHODS_KNOWN];
+   size_t               methodc;  /* number of methods authenticated. */
+
+   /*
+    * Methods that failed authentication at some stage of the process.
+    */
+   int                  badmethodv[METHODS_KNOWN];
+   size_t               badmethodc;  /* number of methods that failed. */
+
+   union {
+      authmethod_uname_t   uname;
+
+#if HAVE_GSSAPI
+      authmethod_gssapi_t  gssapi;
+#endif /* HAVE_GSSAPI */
+#if HAVE_LIBWRAP
+      authmethod_rfc931_t  rfc931;
+#endif /* HAVE_LIBWRAP */
+#if HAVE_PAM
+      authmethod_pam_t     pam;
+#endif /* HAVE_PAM */
+#if HAVE_BSDAUTH
+      authmethod_bsd_t     bsd;
+#endif /* HAVE_BSDAUTH */
+   } mdata;
+} authmethod_t;
+
+typedef union {
+   int                       int_val;
+   struct linger             linger_val;
+   struct timeval            timeval_val;
+   struct in_addr            in_addr_val;
+   unsigned char             uchar_val;
+   struct sockaddr_storage   sockaddr_val;
+   struct ipoption           ipoption_val;
+
+#if HAVE_TCP_IPA
+   struct tcp_ipa            option28_val;
+#endif /* HAVE_TCP_IPA */
+} socketoptvalue_t;
+
+/*
+ * make sure to keep this in sync with the size calculation in
+ * setusersockoptions().
+ */
+typedef enum { int_val = 1, linger_val, timeval_val, in_addr_val, uchar_val,
+               sockaddr_val, ipoption_val, option28_val } socketoptvalue_type_t;
+
+#if HAVE_TCP_IPA
+#define SOCKETOPTVALUETYPE2SIZE(type)                                          \
+   ((type) == int_val      ? sizeof(int) :                                     \
+    (type) == linger_val   ? sizeof(struct linger) :                           \
+    (type) == timeval_val  ? sizeof(struct timeval) :                          \
+    (type) == in_addr_val  ? sizeof(struct in_addr) :                          \
+    (type) == uchar_val    ? sizeof(u_char) :                                  \
+    (type) == sockaddr_val ? sizeof(struct sockaddr_storage) :                         \
+    (type) == ipoption_val ? sizeof(struct ipoption) :                         \
+    (type) == option28_val ? sizeof(struct tcp_ipa)  :                         \
+    0)
+#else /* !HAVE_TCP_IPA */
+
+#define SOCKETOPTVALUETYPE2SIZE(type)                                          \
+   ((type) == int_val      ? sizeof(int) :                                     \
+    (type) == linger_val   ? sizeof(struct linger) :                           \
+    (type) == timeval_val  ? sizeof(struct timeval) :                          \
+    (type) == in_addr_val  ? sizeof(struct in_addr) :                          \
+    (type) == uchar_val    ? sizeof(u_char) :                                  \
+    (type) == sockaddr_val ? sizeof(struct sockaddr_storage) :                         \
+    (type) == ipoption_val ? sizeof(struct ipoption) :                         \
+    0)
+#endif /* !HAVE_TCP_IPA */
+
+#define SOCKETOPT_PRE     (0x1)
+#define SOCKETOPT_POST    (0x2)
+#define SOCKETOPT_ANYTIME (0x4)
+#define SOCKETOPT_ALL     (SOCKETOPT_PRE | SOCKETOPT_POST | SOCKETOPT_ANYTIME)
+
+typedef enum { preonly = 1, anytime, postonly, invalid } sockopt_calltype_t;
+typedef struct {
+   size_t                optid;   /* option identifier                        */
+   socketoptvalue_type_t opttype; /* socket option argument type              */
+   int                   value;   /* value of SO_foo define                   */
+   int                   level;   /* protocol level option applies to         */
+
+   unsigned char         ipv4_on; /* settable for ipv4?                       */
+   unsigned char         ipv6_on; /* settable for ipv6?                       */
+
+   /*
+    * XXX currently assumed that getsockopt() only called for options
+    *     where shift/mask is set
+    */
+   sockopt_calltype_t calltype;   /* when option can be set.                  */
+   unsigned int       shift;      /* number of bits to shift argument value.  */
+   unsigned int       mask;       /* if set, mask specifying valid values.    */
+   unsigned char      dodup;      /* whether option should be duplicated      */
+   unsigned char      needpriv;   /* whether privileges are required          */
+   char               name[SOCKOPTNAME_MAXLEN]; /* optionname as string.      */
+} sockopt_t;
+
+typedef struct {
+   size_t optid;                  /* sockopt_t id symbol is valid for         */
+   socketoptvalue_t symval;       /* value of symbolic constant               */
+   char *name;                    /* textual representation of constant value */
+} sockoptvalsym_t;
+
+typedef struct {
+   const sockopt_t       *info;          /* NULL if unknown option.           */
+   int                   level;          /*
+                                          * socket level to set option at.
+                                          * Not necessarily the same as
+                                          * info->level as we allow the user
+                                          * to specify e.g. "tcp" instead
+                                          * of level sol_socket, indicating
+                                          * the option should only be set
+                                          * for tcp sockets.  The value
+                                          * in "info" is the value we need
+                                          * use when setting the option.
+                                          */
+
+   int                   optname;        /* numeric of option to set.         */
+   socketoptvalue_t      optval;         /* value set.                    */
+   socketoptvalue_type_t opttype;        /* socket option argument type.      */
+
+   unsigned char         isinternalside; /* option for the internal side?     */
+} socketoption_t;
+
+
+union socksaddr_t {
+   char               domain[MAXHOSTNAMELEN];
+   char               urlname[MAXURLLEN];
+   char               ifname[MAXIFNAMELEN];
+   struct in_addr     ipv4;
+   struct {
+      struct in6_addr  ip;
+   uint32_t        scopeid;
+   } ipv6;
 };
 
+typedef struct sockshost_t {
+   unsigned char        atype;
+   union socksaddr_t    addr;
+   in_port_t            port;
+} sockshost_t;
 
-struct protocol_t {
-	unsigned tcp:1;
-	unsigned udp:1;
-	unsigned :0;
-};
+typedef struct {
+   unsigned char httpconnect;    /* session is the result of a http connect. */
+} requestflags_t;
 
+typedef struct request_t {
+   authmethod_t   *auth;   /* pointer to level above. */
+   unsigned char  command;
+   unsigned char  flag;
+   sockshost_t    host;
+   int            protocol;
+   unsigned char  version;
 
-struct command_t {
-	unsigned bind:1;
-	unsigned connect:1;
-	unsigned udpassociate:1;
-
-	/* not real commands as per standard, but they have their use. */
-	unsigned bindreply:1;		/* reply to bind command.	*/
-	unsigned udpreply:1;			/* reply to UDP packet.		*/
-	unsigned :0;
-};
-
-
-struct proxyprotocol_t {
-	unsigned socks_v4:1;
-	unsigned socks_v5:1;
-	unsigned msproxy_v2:1;
-	unsigned http_v1_0:1;
-	unsigned :0;
-};
+   requestflags_t flags;
+} request_t;
 
 
+typedef struct {
+   unsigned char         version;
 
-struct msproxy_state_t {
-	struct sockaddr_in		controladdr;	/* UDP address of proxyserver.		*/
-	int32_t						magic25;
-	int32_t						bindid;
-	int32_t						clientid;
-	int32_t						serverid;
-	unsigned char				seq_recv;		/* seq number of last packet recv.	*/
-	unsigned char				seq_sent;		/* seq number of last packet sent.	*/
-};
+   union {
+      unsigned char         socks;
+      unsigned char         upnp;
+      unsigned short        http;
+   } reply;
+
+   unsigned char  flag;
+   sockshost_t    host;
+   authmethod_t   *auth;   /* pointer to level above. */
+} response_t;
+
+/* encapsulation for UDP packets. */
+typedef struct {
+   unsigned char flag[2];
+   unsigned char frag;
+   sockshost_t   host;
+} udpheader_t;
+
+typedef struct {
+   unsigned char tcp;
+   unsigned char udp;
+} protocol_t;
 
 
-/* values in parentheses designate "don't care" values.	*/
-struct socksstate_t {
-	int							acceptpending;	/* a accept pending?		(-1)			*/
-	struct authmethod_t		auth;				/* authentication in use.				*/
-	int							command;			/* command (-1)							*/
-	int							err;				/* if request failed, errno.			*/
-	int							inprogress;		/* operation in progress? (-1)		*/
-#ifdef SOCKS_TRYHARDER
-	int							lock;				/* some calls require a lock.			*/
+typedef struct {
+   unsigned char bind;
+   unsigned char connect;
+   unsigned char udpassociate;
+
+   /* not real commands as per standard, but they have their use. */
+   unsigned char bindreply;      /* reply to bind command.   */
+   unsigned char udpreply;       /* reply to UDP packet.     */
+} command_t;
+
+
+typedef struct {
+   unsigned char direct;
+   unsigned char socks_v4;
+   unsigned char socks_v5;
+   unsigned char http;
+   unsigned char upnp;
+} proxyprotocol_t ;
+
+/* values in parentheses designate "don't care" values when searching.  */
+typedef struct {
+   int                     acceptpending; /* a accept pending?      (-1)      */
+   authmethod_t            auth;          /* authentication in use.           */
+   int                     command;       /* command (-1)                     */
+   int                     err;           /* if request failed, errno.        */
+#if HAVE_GSSAPI
+   int                     gssimportneeded;
+   gss_buffer_desc         gssapistate;   /* if gssimportneeded, data for it. */
+   unsigned char           gssapistatemem[MAX_GSS_STATE];
+#endif /* HAVE_GSSAPI */
+   int                     inprogress;    /* operation in progress? (-1)      */
+   unsigned char           issyscall;     /* started out as a real system call*/
+   protocol_t              protocol;      /* protocol in use.                 */
+   unsigned char           udpconnect;    /* connected UDP socket?            */
+   int                     syscalldepth;
+   int                     version;       /* version (-1)                     */
+} socksstate_t;
+
+typedef struct ruleaddr_t {
+   unsigned char         atype;
+   union {
+      char               domain[MAXHOSTNAMELEN];
+
+      char               ifname[MAXIFNAMELEN];
+
+      struct {
+         struct in_addr   ip;
+         struct in_addr   mask;
+      } ipv4;
+
+      struct {
+         struct in6_addr   ip;
+         unsigned int      maskbits; /* host order. */
+         uint32_t          scopeid;  /* host order. */
+      } ipv6;
+
+      struct {
+         /*
+          * both should always be zero as this is only meaningful for
+          * a rule that should match all and any kind of ipaddress.
+          */
+         struct in_addr   ip;
+         struct in_addr   mask;
+      } ipvany;
+
+   } addr;
+
+   struct {
+      in_port_t         tcp;      /* TCP portstart or field to operator on.   */
+      in_port_t         udp;      /* UDP portstart or field to operator on.   */
+   } port;
+   in_port_t            portend;   /* only used if operator is range.         */
+   enum operator_t      operator;  /* operator to compare ports via.          */
+} ruleaddr_t;
+
+#ifndef MINIUPNPC_URL_MAXSIZE
+#define MINIUPNPC_URL_MAXSIZE (128)
 #endif
-	struct msproxy_state_t	msproxy;			/* if msproxy, msproxy state.			*/
-	struct protocol_t			protocol;		/* protocol in use.						*/
-	unsigned						udpconnect:1;	/* connected UDP socket?				*/
-	int							system;			/* don't check, use system call.		*/
-	int							version;			/* version (-1)							*/
-};
+typedef union {
+   struct {
+      char    controlurl[MINIUPNPC_URL_MAXSIZE];
+      char    servicetype[MINIUPNPC_URL_MAXSIZE];
+   } upnp;
+} proxystate_t;
+
+typedef struct linkedname_t {
+   char                  *name;
+   struct linkedname_t   *next;   /* next name in list.                       */
+} linkedname_t;
 
 
-struct ruleaddress_t {
-	char						atype;
-	union {
-		char					domain[MAXHOSTNAMELEN];
-		char					ifname[MAXIFNAMELEN];
-		struct {
-			struct in_addr	ip;
-			struct in_addr	mask;
-		} ipv4;
+#if HAVE_LDAP
+typedef struct {
+       linkedname_t *ldapurl;               /* name of ldap urls.      */
+       linkedname_t *ldapbasedn;            /* name of ldap basedns.   */
+       char         attribute[MAXNAMELEN];
+       char         attribute_AD[MAXNAMELEN];
+       char         certfile[MAXURLLEN];
+       char         certpath[MAXURLLEN];
+       int          debug;
+       int          mdepth;
+       char         domain[MAXNAMELEN];
+       char         filter[MAXNAMELEN];
+       char         filter_AD[MAXNAMELEN];
+       char         keytab[MAXNAMELEN];
+       int          port;
+       int          portssl;
 
-	} addr;
-
-	struct {
-		in_port_t			tcp;			/* TCP portstart or field to operator on.	*/
-		in_port_t			udp;			/* UDP portstart or field to operator on.	*/
-	} port;
-	in_port_t				portend;		/* only used if operator is range.			*/
-	enum operator_t		operator;	/* operator to compare ports via.			*/
-};
-
-struct serverstate_t {
-	struct command_t			command;
-	struct extension_t		extension;
-	struct protocol_t			protocol;
-	int							methodv[MAXMETHOD];		/* methods to offer.			*/
-	size_t						methodc;						/* number of methods set.	*/
-	struct proxyprotocol_t	proxyprotocol;
-};
+       unsigned char auto_off;
+       unsigned char ssl;
+       unsigned char certcheck;
+       unsigned char keeprealm;
+} ldap_t;
+#endif /* HAVE_LDAP */
 
 
-struct gateway_t {
-	struct sockshost_t			host;
-	struct serverstate_t			state;
-};
+
+typedef struct {
+   command_t        command;
+   extension_t      extension;
+   protocol_t       protocol;
+
+   int              cmethodv[METHODS_KNOWN]; /* clientmethods to offer.       */
+   size_t           cmethodc;                /* number of methods to offer.   */
+   int              smethodv[METHODS_KNOWN]; /* socksmethods to offer.        */
+   size_t           smethodc;                /* number of methods to offer.   */
+
+   proxyprotocol_t  proxyprotocol;
+
+#if HAVE_PAM
+   char             pamservicename[MAXNAMELEN];
+#endif /* HAVE_PAM */
+
+#if HAVE_BSDAUTH
+   char             bsdauthstylename[MAXNAMELEN];
+#endif /* HAVE_BSDAUTH */
+
+#if HAVE_GSSAPI
+   char             gssapiservicename[MAXNAMELEN];
+   char             gssapikeytab[MAXNAMELEN];
+   gssapi_enc_t     gssapiencryption;       /* encryption status.      */
+#endif /* HAVE_GSSAPI */
+
+#if HAVE_LDAP
+   ldap_t           ldap;
+#endif
+
+#if HAVE_LIBMINIUPNP
+   proxystate_t     data;
+#endif /* HAVE_LIBMINIUPNP */
+} serverstate_t;
+
+typedef struct {
+   sockshost_t     addr;
+   serverstate_t   state;
+} gateway_t;
 
 
-struct socks_t {
-	unsigned char				version;
-									/*
-									 *	Negotiated version.  Each request and
-									 *	response will also contain a version number, that
-									 *	is the version number given for that particular
-									 *	packet and should be checked to make sure it is
-									 *  the same as the negotiated version.
-									*/
-	struct request_t				req;
-	struct response_t				res;
-	struct authmethod_t			auth;
-	struct gateway_t				gw;
-	struct socksstate_t			state;
-};
+typedef struct {
+   unsigned char     version;
+                     /*
+                      * Negotiated version.  Each request and
+                      * response will also contain a version number, that
+                      * is the version number given for that particular
+                      * packet and should be checked to make sure it is
+                      * the same as the negotiated version.
+                      */
+   request_t         req;
+   response_t        res;
+   gateway_t         gw;
+   socksstate_t      state;
+} socks_t;
 
-enum portcmp { e_lt, e_gt, e_eq, e_neq, e_le, e_ge, e_nil };
+enum portcmp { e_lt = 1, e_gt, e_eq, e_neq, e_le, e_ge, e_nil };
 
 
 
@@ -1587,319 +2011,960 @@ enum portcmp { e_lt, e_gt, e_eq, e_neq, e_le, e_ge, e_nil };
  * for use in generic functions that take either reply or request
  * packets, include a field indicating what it is.
  */
-#define SOCKS_REQUEST	0x1
-#define SOCKS_RESPONSE	0x2
+#define SOCKS_REQUEST   0x1
+#define SOCKS_RESPONSE  0x2
 
-struct socksfd_t {
-	unsigned					allocated:1;/* allocated?										*/
-	int						control;		/* control connection to server.				*/
-	struct socksstate_t	state;		/* state of this connection.					*/
-	unsigned					:0;
-	struct sockaddr		local;		/* local address of data connection.		*/
-	unsigned					:0;
-	struct sockaddr		server;		/* remote address of data connection.		*/
-	unsigned					:0;
-	struct sockaddr		remote;		/* address server is using on our behalf.	*/
-	unsigned					:0;
-	struct sockaddr		reply;		/* address to expect reply from.				*/
-	unsigned					:0;
+/*
+ * This object is either used for straightforward buffering, or
+ * in the case the data is gssapi-encapsulated, to handle gssapi-data.
+ * In the case of simple, non-gssapi, buffering,
+ * no further explanation is given; the len field simply holds
+ * the number of bytes currently buffered.
+ *
+ * Next we describe how it is used in the case of gssapi.
+ *
+ * In the case of gssapi, the buffer is divided into two parts,
+ * the first part holding not-encoded data, and the latter part
+ * holding encoded data.
+ *
+ * The operation when reading is as follows:
+ *    1) Read into buf as much data as is needed to be able to
+ *       decode the data (in the case of gssapi, the whole token).
+ *       While doing this, we keep incrementing "enclen", to indicate
+ *       how much encoded data has been stored in the buffer.  "len"
+ *       is not touch during this.
+ *
+ *    2) When 1) has completed, we replace the data in buf with
+ *       the decoded version of data in "buf", reset "enclen", and
+ *       set "len" to indicate how much decoded data is stored in the
+ *       buffer.
+ *
+ *    3) On subsequent read operations on the socket corresponding to
+ *       the data (s), return data from buf instead of reading it from
+ *       the socket.
+ *
+ *    4) When all data in buf has been returned, clear the iobuffer.
+ *
+ * The operation when writing is more complicated, because
+ * we can get multiple write requests that we fail to send down
+ * to the socket buffer, which in sum may be bigger than the
+ * the iobuffer set aside to hold buffered unwritten data.
+ *
+ * The only way to prevent that situation from occurring is to
+ * put a cap on how much we read, and never read more data than
+ * we can store in our write-buffer, encoded.
+ * We can use gss_wrap_size_limit() in combination with the amount
+ * of data free in the buffer to find out the max amount of data to
+ * read, and read no more than that in the tcp case.
+ *
+ * The operation for writing thus becomes:
+ * 1) Encode the data received and write it to the socket.
+ *
+ * 2) If we fail to write all the data, and it is a tcp socket,
+ *    store the remaining data in the iobuffer, setting encodedlen
+ *    to the size of data remaining, and used to zero.
+ *    If it's a udp socket, there is not much to do, so return the
+ *    error.
+ *
+ * 3) On subsequent write operations on the socket, try to write the
+ *    data we had previously buffered.  Then continue with 1).
+ *
+ $ 4) When all data has been written, clear the iobuffer.
+ *
+ */
 
-	union {
-		struct sockaddr		accepted;	/* address server accepted for us.		*/
-		struct sockaddr		connected;	/* address server connected to for us.	*/
-	} forus;
+typedef enum { READ_BUF  = 0 /* MUST BE 0 or 1 */,
+               WRITE_BUF = 1 /* MUST BE 0 or 1 */ } whichbuf_t;
 
-	struct route_t		*route;
-};
+typedef struct {
+   unsigned char allocated;
+   int           s;
+
+#if HAVE_GSSAPI
+#  if (SOCKD_BUFSIZE) < (2 * (MAXGSSAPITOKENLEN + GSSAPI_HLEN))
+ #     error "SOCKD_BUFSIZE too small."
+#  endif
+#endif /* HAVE_GSSAPI */
+
+   char         buf[2][SOCKD_BUFSIZE];
+
+   struct {
+      size_t   len;        /* length of decoded/plaintext data in buffer      */
+      size_t   enclen;     /* length of encoded data in buffer.               */
+
+      int      mode;       /* buffering mode.  Default is no buffering.       */
+      ssize_t  size;       /*
+                            * size of buffer to use.  Can not be larger than
+                            * SOCKD_BUFSIZE.  Default is SOCKD_BUFSIZE.
+                            */
+
+#if SOCKS_CLIENT
+      size_t   peekedbytes;/* # of bytes we last peeked at.                   */
+#endif /* SOCKS_CLIENT */
+   } info[2];
+
+   int      stype;         /* socket type; tcp or udp                         */
+} iobuffer_t;
+
+typedef struct route_t {
+   int              number;   /* route number.                                */
+
+   struct {
+      unsigned char autoadded;/* autoadded route?                             */
+      size_t        failed;   /* route is bad?  How many times it has failed. */
+      time_t        badtime;  /* if route is bad, time last marked as such.   */
+   } state;
+
+   socketoption_t   *socketoptionv;
+   size_t           socketoptionc;
+
+   ruleaddr_t       src;
+   ruleaddr_t       dst;
+   gateway_t        gw;
+
+   ruleaddr_t       rdr_from;
+
+   struct route_t   *next;      /* next route in list.               */
+} route_t;
+
+typedef struct {
+   unsigned char        allocated;  /* allocated?                             */
+   int                  control;    /* control connection to server.          */
+   socksstate_t         state;      /* state of this connection.              */
+
+   struct sockaddr_storage local;   /* local address of control connection.   */
+                                    /* XXX does not look to be case for udp.  */
+
+   struct sockaddr_storage server;  /* remote address of control connection.  */
+   struct sockaddr_storage remote;  /* address server is using on our behalf. */
+   struct sockaddr_storage reply;   /*
+                                     * address to expect reply from, if not
+                                     * same as control.
+                                     */
+
+   union {
+      sockshost_t   accepted;   /* address server accepted for us.     */
+      sockshost_t   connected;  /* address server connected to for us. */
+   } forus;
+
+   route_t      *route;
+} socksfd_t;
+
+/*
+ * getaddrinfo(3) returns separate entries for udp and tcp, even everything
+ * else is the same.  That means we effectively only get half MAX_ADDRINFO_NEXT
+ * unique ipaddresses at most.  We used 5 when we were using the gethostby*(3)
+ * api, so double for getaddrinfo(3).
+ *
+ * Might think about filtering out otherwise duplicate tcp/udp entries to
+ * save memory.  Would make the cache less general though.
+ */
+#define MAX_ADDRINFO_NEXT (10)
+
+typedef enum { id_name = 1, id_addr } hostent_id_t;
+
+typedef struct {
+   unsigned       allocated:1;      /* entry allocated?                       */
+   time_t         written;          /* time this entry was created.           */
+
+   /* if looked up address/name was found, 0.  Otherwise errorcode.  */
+   int            gai_rc;
+
+   /*
+    * address or hostname used with DNS for this entry.
+    * Note that gethostbyname(x) may return address k, but gethostbyaddr(k)
+    * need not return the hostname 'x', so we need different entries for
+    * hostnames and addresses and can not reuse one as the other.
+    */
+   hostent_id_t key;
+   union {
+      char                     name[MAXHOSTNAMELEN];
+      struct sockaddr_storage  addr;
+   } id;
+
+
+   char            service[MAXSERVICELEN];
+
+   union {
+      struct {
+            struct addrinfo addrinfo;
+            /*
+             * The pointers in addrinfo are set to point to the below memory,
+             * to avoid having to do dynamic allocation/free repeatedly.
+             */
+
+            /*
+             * there is only one hostname returned in struct addrinfo
+             * by getnameinfo(3).
+             */
+            char            ai_canonname_mem[MAXHOSTNAMELEN];
+
+            /* but there can be multiple addresses. */
+            struct sockaddr_storage ai_addr_mem[MAX_ADDRINFO_NEXT];
+
+            struct addrinfo         ai_next_mem[MAX_ADDRINFO_NEXT];
+
+            struct addrinfo   *hints;
+            struct addrinfo   hints_mem; /* memory for hints, if not NULL. */
+      } getaddr;
+
+      struct {
+         char name[MAXHOSTNAMELEN];
+         int  flags;
+      } getname;
+   } data;
+} dnsinfo_t;
+
+
+#define HOSTENT_MAX_ALIASES (5)
+typedef struct {
+   unsigned       allocated:1;      /* entry allocated?                       */
+   unsigned       notfound:1;       /* looked up address/name was not found.  */
+   time_t         written;          /* time this entry was created.           */
+
+
+   /*
+    * address or hostname used with DNS for this entry.
+    * Note that gethostbyname(x) may return address k, but gethostbyaddr(k)
+    * need not return the hostname 'x', so we need different entries for
+    * hostnames and addresses and can not reuse one as the other.
+    */
+   hostent_id_t key;
+   union {
+      char            name[MAXHOSTNAMELEN];
+      struct in_addr  ipv4;
+   } id;
+
+   struct hostent hostent;
+
+   /*
+    * The contents of hostent is set to point to the corresponding area here,
+    * rather than allocating it on the stack.
+    * We add one to HOSTENT_MAX_ALIASES because the last index is used
+    * for NULL-terminating, as per the libresolv (rfc?) spec.
+    */
+   char h_name[MAXHOSTNAMELEN];
+   char *h_aliases[HOSTENT_MAX_ALIASES + 1];
+   char *h_addr_list[HOSTENT_MAX_ALIASES + 1];
+
+   /* memory for above arrays. */
+   char h_aliasesmem[HOSTENT_MAX_ALIASES + 1][MAXHOSTNAMELEN];
+   char h_addr_listmem[HOSTENT_MAX_ALIASES + 1][MAX(sizeof(struct in_addr),
+                                                    sizeof(struct in6_addr))];
+
+} hostentry_t;
+
+typedef struct {
+#if !SOCKS_CLIENT
+   interfaceside_t side;        /* what interface-side we are sending out on. */
+   struct sockaddr_storage peer;/* peer we are receiving from.                */
+#endif /* !SOCKS_CLIENT */
+
+   int            type;       /* socket type; SOCK_DGRAM or SOCK_STREAM.      */
+   int            flags;      /* flags set on the received data.              */
+
+   size_t         fromsocket; /*
+                               * number of bytes read from socket.  This
+                               * may differ from the return value of the
+                               * function if some sort of encapsulation
+                               * is used (currently only gssapi is
+                               * possible), or parts or all of the data was
+                               * read from an internal buffer rather than
+                               * from the socket itself.
+                               * It may also be less than the return value,
+                               * if more was read from the socket than was
+                               * returned at this time.
+                               */
+
+   struct timeval ts;      /* time packet was received (for datagram only). */
+} recvfrom_info_t;
+
+typedef struct {
+   interfaceside_t side; /*
+                          * what interface-side we are sending out on.
+                          * Only used by server.
+                          */
+
+   size_t          tosocket; /*
+                              * number of bytes written to socket.  This
+                              * may differ from the return value of the
+                              * function if some sort of encapsulation
+                              * (currently only gssapi is possible) is
+                              * used, or parts or all of the data was
+                              * written from an internal buffer rather
+                              * than to the socket itself.
+                              */
+} sendto_info_t;
 
 
 
-struct route_t {
-	int							number;		/* routenumber.								*/
-
-	struct {
-		unsigned bad:1;		/* route is bad?												*/
-		time_t	badtime;		/* if route is bad, time it was marked as such.		*/
-		unsigned direct:1;	/* direct connection, no proxy.							*/
-		unsigned :0;
-	} state;
-
-
-	struct ruleaddress_t		src;
-	struct ruleaddress_t		dst;
-	struct gateway_t			gw;
-
-	struct route_t				*next;		/* next route in list.						*/
-};
-
-
-
-__BEGIN_DECLS
 
 /*
  * versions of BSD's error functions that log via slog() instead.
  */
 
-#ifdef STDC_HEADERS
-void serr(int eval, const char *fmt, ...)
-#else
-void serr()
-#endif  /* STDC_HEADERS */
-__attribute__ ((format (__printf__, 2, 3)));
+void serr(const char *fmt, ...)
+          __ATTRIBUTE__((noreturn)) __ATTRIBUTE__((FORMAT(printf, 1, 2)));
 
-#ifdef STDC_HEADERS
-void serrx(int eval, const char *fmt, ...)
-#else
-void serrx()
-#endif  /* STDC_HEADERS */
-__attribute__ ((format (__printf__, 2, 3)));
+void serrx(const char *fmt, ...)
+          __ATTRIBUTE__((noreturn)) __ATTRIBUTE__((FORMAT(printf, 1, 2)));
 
-#ifdef STDC_HEADERS
 void swarn(const char *fmt, ...)
-#else
-void swarn()
-#endif  /* STDC_HEADERS */
-__attribute__ ((format (__printf__, 1, 2)));
+           __ATTRIBUTE__((FORMAT(printf, 1, 2)));
 
-#ifdef STDC_HEADERS
 void swarnx(const char *fmt, ...)
-#else
-void swarnx()
-#endif  /* STDC_HEADERS */
-__attribute__ ((format (__printf__, 1, 2)));
+            __ATTRIBUTE__((FORMAT(printf, 1, 2)));
+
 
 void
-genericinit __P((void));
+runenvcheck(void);
+/*
+ * Verify that run environment corresponds to build environment.
+ */
+
+long long
+maxvalueoftype(const size_t typelen);
+/*
+ * Gives the maxvalue for a signed integer-type stored in a object of length
+ * "typelen".
+ */
+
+long long
+minvalueoftype(const size_t typelen);
+/*
+ * Gives the minvalue for a signed integer-type stored in a object of length
+ * "typelen".
+ */
+
+unsigned long long
+umaxvalueoftype(const size_t typelen);
+/*
+ * Gives the maxvalue for an unsigned integer-type stored in a object of length
+ * "typelen".
+ */
+
+unsigned long long
+uminvalueoftype(const size_t typelen);
+/*
+ * Gives the minvalue for an unsigned integer-type stored in a object of length
+ * "typelen".
+ */
+
+
+void
+genericinit(void);
 /*
  * Generic init, called after clientinit()/serverinit().
  */
 
 void
-newprocinit __P((void));
+optioninit(void);
+/*
+ * sets options to a reasonable default.
+ */
+
+void
+postconfigloadinit(void);
+/*
+ * To be called after config is loaded.
+ */
+
+int
+socks_initupnp(gateway_t *gw, char *emsg, const size_t emsglen);
+/*
+ * Inits upnp for interface corresponding to the gateway "gw".
+ * If successful, the necessary information to later use the found
+ * upnp router is saved in "data", which should normally be part of a
+ * route object.
+ *
+ * Returns:
+ *    On success: 0.
+ *    On failure: -1 (no appropriate upnp devices found, or some other error.)
+ */
+
+void
+newprocinit(void);
 /*
  * After a new process is started/forked, this function should
  * be called.  It will initialize various things, open needed
  * descriptors, etc. and can be called as many times as wanted.
  */
 
-
-struct udpheader_t *
-sockaddr2udpheader __P((const struct sockaddr *to, struct udpheader_t *header));
-/*
- * Writes a udpheader representation of "to" to "header".
- * Returns a pointer to "header".
- */
-
-char *
-udpheader_add __P((const struct sockshost_t *host, char *msg, size_t *len,
-						 size_t msgsize));
+void *
+udpheader_add(const sockshost_t *host, void *msg, size_t *len,
+              const size_t msgsize);
 /*
  * Prefixes the udpheader_t version of "host" to a copy of "msg",
  * which is of length "len".
- * "msgsize" gives the size of the memory pointed to by "msg".
- * If "msgsize" is large enough the function will prepend the udpheader
- * to "msg" directly (moving the old contents to the right) rather than
- * allocating new memory.
- * Upon return "len" gives the length of the new "msg".
+ * "msgsize" gives the total size of the memory pointed to by "msg",
+ * which may be up to "len" big.
  *
- *	Returns:
- *		On success: "msg" with the udpheader prepended.
- *		On failure: NULL (out of memory).
- */
-
-int
-socks_socketisbound __P((int s));
-/*
+ * If "msgsize" is large enough the function will prepend the socks
+ * udpheader to "msg", moving the old contents in "msg" to the right.
+ * If not, NULL will be returned with errno set to EMSGSIZE.  This
+ * should only happen if the payload + the socks udpheader is larger
+ * than the maxsize of a UDP (IP) packet.
+ *
  * Returns:
- *		If "s" is bound: 1
- *		If "s" is not bound: 0
- *		If "s" is not socket or error occurred determining if bound: -1
+ *   On success: "msg" with the udpheader prepended.  The length of the new
+       message is stored in "len".
+ *   On failure: NULL (message to large).
  */
 
 int
-fdisopen __P((int fd));
+fdisopen(const int fd);
 /*
- * returns 1 if the filedescriptor "fd" currently references a open object.
- * returns 0 otherwise.
+ * returns true if the file descriptor "fd" currently references a open fd,
+ * false otherwise.
+ */
+
+int
+fdisblocking(const int fd);
+/*
+ * returns true if the file descriptor "fd" is blocking, false otherwise.
  */
 
 void
-closev __P((int *array, int count));
+closev(size_t ic, int *iv);
 /*
- * Goes through "array", which contains "count" elements.
+ * Goes through "iv", which contains "ic" elements.
  * Each element that does not have a negative value is closed.
  */
 
+const loglevel_t *
+loglevel(const char *name);
+/*
+ * Returns the loglevel value having the name "name".
+ * Returns NULL if there is no such loglevel.
+ */
+
+
 int
-socks_logmatch __P((unsigned int d, const struct logtype_t *log));
+socks_logmatch(int d, const logtype_t *log);
 /*
  * Returns true if "d" is a descriptor matching any descriptor in "log".
  * Returns false otherwise.
  */
 
-
-struct sockaddr *
-sockshost2sockaddr __P((const struct sockshost_t *shost,
-								struct sockaddr *addr));
+struct sockaddr_storage *
+int_sockshost2sockaddr2(const sockshost_t *shost, struct sockaddr_storage *addr,
+                        size_t addrlen, int *gaierr,
+                        char *emsg, size_t emsglen);
 /*
  * Converts the sockshost_t "shost" to a sockaddr struct and stores it
- * in "addr".
+ * in "addr".  If conversion fails, 0/0 is stored in "addr" and "gaierr"
+ * is set to the resolver errorcode.  Otherwise, "gaierr" is set to 0.
+ *
+ * If "addr" is NULL, the function uses a static buffer which may be
+ * overwritten on the next call to this function.
+ *
+ * If conversion fails, emsg contains the reason.  If failure is related
+ * to DNS, "gaierr" is in addition set.
+ *
  * Returns: "addr".
+ *
  */
 
-struct sockaddr *
-fakesockshost2sockaddr __P((const struct sockshost_t *host,
-									 struct sockaddr *addr));
+struct sockaddr_storage *
+int_sockshost2sockaddr(const sockshost_t *shost, struct sockaddr_storage *addr,
+                       size_t addrlen);
+/*
+ * like int_sockshost2sockaddr(), but without the "gaierr" argument.
+ */
+
+
+struct sockaddr_storage *
+int_fakesockshost2sockaddr(const sockshost_t *host,
+                           struct sockaddr_storage *addr, size_t addrlen);
 /*
  * Like sockshost2sockaddr(), but checks whether the address in
  * "host" is fake when converting.
  */
 
-struct sockshost_t *
-sockaddr2sockshost __P((const struct sockaddr *addr, struct sockshost_t *host));
+struct sockaddr_storage *
+int_urlstring2sockaddr(const char *string, struct sockaddr_storage *addr,
+                       size_t addrlen, int *gaierr,
+                       char *emsg, size_t emsglen);
+/*
+ * Converts the address given in "string", on URL:// format, to
+ * a sockaddr address stored in "saddr".
+ *
+ * Returns "saddr" on success.
+ *
+ * Returns NULL on failure with the reason written to "emsg", which must
+ * be of at least "emsglen" size.  If failure is due to resolver failure,
+ * "gaierr" will contain the resolver errorcode, or 0 if not.
+ */
+
+sockshost_t *
+sockaddr2sockshost(const struct sockaddr_storage *addr, sockshost_t *host);
 /*
  * Converts the sockaddr struct "shost" to a sockshost_t struct and stores it
+ * in "host".  If "host" is NULL, a static host object is used instead.
+ *
+ * Returns: a pointer to the object containing the sockshost_t representation.
+ */
+
+int
+sockaddr2hostname(const struct sockaddr_storage *sa, char *hostname,
+                  const size_t hostnamelen);
+/*
+ * reversemaps "sa" to hostname and stores it "hostname", which is at least
+ * "hostnamelen" bytes big.
+ *
+ * Returns:
+ *    0 on success.
+ *    The corresponding getnameinf(3) error on failure.
+ */
+
+sockshost_t *
+ruleaddr2sockshost(const ruleaddr_t *address, sockshost_t *host, int protocol);
+/*
+ * Converts the ruleaddr_t "address" to a sockshost_t struct and stores it
  * in "host".
  * Returns: "host".
  */
 
-struct sockshost_t *
-ruleaddress2sockshost __P((const struct ruleaddress_t *address,
-									struct sockshost_t *host, int protocol));
+struct sockaddr_storage *
+int_ruleaddr2sockaddr(const ruleaddr_t *address, struct sockaddr_storage *sa,
+                      size_t salen, const int protocol);
 /*
- * Converts the ruleaddress_t "address" to a sockshost_t struct and stores it
- * in "host".
- * Returns: "host".
+ * Converts the ruleaddr_t "address" to a sockshost_t struct and stores it
+ * in "sa" if not NULL.
+ *
+ * Returns: "sa".
  */
 
-struct ruleaddress_t *
-sockshost2ruleaddress __P((const struct sockshost_t *host,
-									struct ruleaddress_t *addr));
+struct sockaddr_storage *
+int_ruleaddr2sockaddr2(const ruleaddr_t *address, struct sockaddr_storage *sa,
+                       size_t salen, const int protocol, int *gaierr,
+                       char *emsg, const size_t emsglen);
 /*
- * Converts the sockshost_t "host" to a ruleaddress_t struct and stores it
+ * Converts the ruleaddr_t "address" to a sockshost_t struct and stores it
+ * in "sa" if not NULL.
+ *
+ * On error, "gaierr" may be set, and "emsg" will be set if not NULL.
+ *
+ * Returns: "sa".
+ */
+
+
+
+ruleaddr_t *
+sockshost2ruleaddr(const sockshost_t *host, ruleaddr_t *addr);
+/*
+ * Converts the sockshost_t "host" to a ruleaddr_t struct and stores it
  * in "addr".
  * Returns: "addr".
  */
 
-struct ruleaddress_t *
-sockaddr2ruleaddress __P((const struct sockaddr *addr,
-								  struct ruleaddress_t *ruleaddr));
+ruleaddr_t *
+sockaddr2ruleaddr(const struct sockaddr_storage *addr, ruleaddr_t *ruleaddr);
 /*
- * Converts the struct sockaddr "addr" to a ruleaddress_t struct and stores
+ * Converts the struct sockaddr "addr" to a ruleaddr_t struct and stores
  * it in "ruleaddr".
  * Returns: "addr".
  */
 
-struct sockaddr *
-hostname2sockaddr __P((const char *name, int index, struct sockaddr *addr));
+struct sockaddr_storage *
+int_hostname2sockaddr(const char *name, size_t index,
+                      struct sockaddr_storage *addr, size_t addrlen);
 /*
  * Retrieves the address with index "index" for the hostname named "name".
  * Returns:
- *		On success: "addr", filled in with the address found.
- *		On failure: NULL (no address found).
+ *      On success: "addr", filled in with the address found.
+ *      On failure: NULL (no address found).
  */
 
-struct sockaddr *
-ifname2sockaddr __P((const char *ifname, int index, struct sockaddr *addr));
+struct sockaddr_storage *
+int_ifname2sockaddr(const char *ifname, size_t index,
+                    struct sockaddr_storage *addr, size_t addrlen,
+                    struct sockaddr_storage *mask, size_t masklen);
 /*
  * Retrieves the address with index "index" on the interface named "ifname".
+ * If "mask" is not NULL, the mask of the interface is stored here.
+ *
  * Returns:
- *		On success: "addr", filled in with the address found.
- *		On failure: NULL (no address found).
+ *      On success: "addr", and possibly "netmask", filled in with the
+ *                  address found.
+ *      On failure: NULL (no address found on the interface at that index.
+ */
+
+const char *
+sockaddr2ifname(struct sockaddr_storage *addr, char *ifname, size_t iflen);
+/*
+ * Retrieves the name of the interface the address "addr" belongs to.
+ * The name is written to "ifname", which must be of len "iflen".
+ * If "ifname" or "iflen" is NULL, the name is written to a local
+ * buffer instead.
+ *
+ * Returns a pointer to the memory containing the interface name, or
+ * NULL if no matching interface is found.
+ *
  */
 
 int
-sockatmark __P((int s));
+sockatmark(int s);
 /*
  * If "s" is at oob mark, return 1, otherwise 0.
  * Returns -1 if a error occurred.
  */
 
 ssize_t
-recvmsgn __P((int s, struct msghdr *msg, int flags));
+recvmsgn(int s, struct msghdr *msg, int flags);
 /*
- * Like recvmsg(), but tries to read until all has been read.
+ * Like recvmsg(), but handles some os-specific bugs.
  */
 
 ssize_t
-sendmsgn __P((int s, const struct msghdr *msg, int flags));
+sendmsgn(int s, const struct msghdr *msg, int flags, const time_t timeoutms);
 /*
- * Like sendmsg(), but tries to send until all has been sent.
+ * Like sendmsg(), but retries on temporary errors, including blocking
+ * with select(2) for up to "timeoutms" milliseconds.
+ *
+ * If "timeout" is -1, block forever, or until we've failed a predefined
+ * number of maxtimes, whatever comes first.
  */
 
 ssize_t
-readn __P((int, void *, size_t, struct authmethod_t *auth));
+readn(int, void *, size_t, const size_t minread, authmethod_t *auth)
+      __ATTRIBUTE__((__BOUNDED__(__buffer__, 2, 3)));
 /*
- * Like read() but retries and takes an additional "auth" argument
- * to be used if not NULL.
+ * Like read() but with two additional arguments:
+ * minread - the minimum amount of bytes to read before returning, or error.
+ * auth    - authentication info for the file descriptor.  May be NULL.
  */
 
 ssize_t
-writen __P((int, const void *, size_t, struct authmethod_t *auth));
+writen(int, const void *, size_t, const size_t minwrite,
+       authmethod_t *auth)
+      __ATTRIBUTE__((__BOUNDED__(__buffer__, 2, 3)));
 /*
- * like write() but retries and takes an additional "auth" argument
- * to be used if not NULL.
+ * like write() but if with two additional arguments:
+ * minwrite - the minimum amount of bytes to write before returning, or error.
+ * auth     - authentication info for the file descriptor.  May be NULL.
  */
 
 ssize_t
-socks_recvfrom __P((int, void *, size_t, int, struct sockaddr *, socklen_t *,
-						  struct authmethod_t *auth));
+socks_recvfrom(int s, void *buf, size_t len, int flags,
+               struct sockaddr_storage *from,
+               socklen_t *fromlen, recvfrom_info_t *recvflags,
+               authmethod_t *auth)
+               __ATTRIBUTE__((__BOUNDED__(__buffer__, 2, 3)));
 /*
- * Like recvfrom(), but with an additional auth argument to be used
- * if not NULL.
+ * Similar to recvfrom(), but with two additional arguments:
+ *  - auth:       if not NULL, the authentication used for this session.
+ *  - recvflags:  if not NULL, information about the data received.
  */
 
 ssize_t
-socks_sendto __P((int, const void *, size_t, int, const struct sockaddr *,
-						socklen_t, struct authmethod_t *auth));
+socks_recvfromn(const int s, void *buf, size_t len, const size_t minread,
+                const int flags, struct sockaddr_storage *from,
+                socklen_t *fromlen, recvfrom_info_t *recvflags,
+                authmethod_t *auth)
+                __ATTRIBUTE__((__BOUNDED__(__buffer__, 2, 3)));
 /*
- * Like sendto(), but with an additional auth argument to be used
- * if not NULL.
+ * Like socks_recvfrom(), but retries until minread has been read, or failure.
+ */
+
+ssize_t
+socks_sendto(int s, const void *msg, size_t len, int flags,
+             const struct sockaddr_storage *, socklen_t,
+             sendto_info_t *sendflags, authmethod_t *auth)
+             __ATTRIBUTE__((__BOUNDED__(__buffer__, 2, 3)));
+/*
+ * Like sendto(), but with two additional arguments:
+ * - sendflags: if not NULL, updated with sendto_info upon return.
+ */
+
+ssize_t
+socks_sendton(int s, const void *buf, size_t len, const size_t minwrite,
+              int flags, const struct sockaddr_storage *to, socklen_t tolen,
+              sendto_info_t *sendflags, authmethod_t *auth)
+              __ATTRIBUTE__((__BOUNDED__(__buffer__, 2, 3)));
+/*
+ * Like socks_sendto(), but retries until "minwrite" is written, or failure.
  */
 
 int
-closen __P((int));
+closen(int);
 /*
  * Wrapper around close().  Retries on EINTR.
  */
 
-int
-selectn __P((int, fd_set *, fd_set *, fd_set *, struct timeval *));
+struct timeval *
+gettimeofday_monotonic(struct timeval *tv);
 /*
- * Wrapper around select().  Retries on EINTR.
+ * Similar to gettimeofday(2), but time is monotonic.
+ * Returns "tv", filled with the current time.
+ */
+
+time_t
+time_monotonic(time_t *tloc);
+/*
+ * Similar to time(3), but time is monotonic.
+ */
+
+unsigned long
+tv2us(const struct timeval *tv);
+/*
+ * converts "tv" to microseconds and returns the result.
+ */
+
+struct timeval *
+us2tv(const unsigned long us, struct timeval *tv);
+/*
+ * converts "usec" to struct timeval and stores the result in "tv".
+ * Returns "tv".
+ */
+
+
+int
+selectn(int nfds, fd_set *rset, fd_set *bufrset, fd_set *buffwset,
+         fd_set *wset, fd_set *xset, struct timeval *);
+/*
+ * Wrapper around select() that takes two additional arguments:
+ * bufrset  - if not NULL, set to contain descriptors with data buffered
+ *            for reading.
+ * buffwset - if not NULL, set to contain descriptors with data buffered
+ *            for writing (buffered-for-writing).
+ *
+ * In addition, if it's called by the server, it checks whether we
+ * have a signal queued internally, and if so calls the appropriate
+ * signal handler.
  */
 
 int
-acceptn __P((int, struct sockaddr *, socklen_t *));
+acceptn(int, struct sockaddr_storage *, socklen_t *);
 /*
  * Wrapper around accept().  Retries on EINTR.
  */
 
-#ifdef STDC_HEADERS
 int
-snprintfn(char *str, size_t size, const char *format, ...);
-#else
-int
-snprintfn();
-#endif
+socks_socket(const int domain, const int type, const int protocol);
 /*
- * Wrapper around snprintf() for consistent behaviour, same as system
- * snprintf() but the following are also enforced:
- *		returns 0 instead of -1 (rawterminates *str).
- *		never returns a value greater than size - 1.
+ * Like socket(2), but also sets some options we always want to set.
  */
 
+
+int
+setblocking(const int fd, const char *context);
+/*
+ * Configures "fd" to use blocking i/o.
+ * "context" provides the context "fd" will be used in.
+ *
+ * Returns:
+ *    On success: the original fd-flags set on fd "fd" before the change.
+ *    On failure: -1.  In this case errno will be set and a warning will
+ *                     be logged using "context".
+ */
+
+int
+setnonblocking(const int fd, const char *context);
+/*
+ * Configures "fd" to use non-blocking i/o.
+ * "context" provides the context "fd" will be used in.
+ *
+ * Returns:
+ *    On success: the original fd-flags set on fd "fd" before the change.
+ *    On failure: -1.  In this case errno will be set and a warning will
+ *                     be logged using "context".
+ */
+
+int
+socks_socketisforlan(const int s);
+/*
+ * If we can determine that the socket "s" is for lan use only, i.e. should
+ * not be proxied, returns true.  Otherwise, returns false.
+ */
+
+struct sockaddr_storage *
+socketisconnected(const int s, struct sockaddr_storage *addr, socklen_t alen);
+/*
+ * If the socket "s" is connected to a peer, returns peer's address.
+ * If "addr" is not NULL, the peer address is stored in "addr", and a
+ * pointer to "addr" is returned.  Otherwise a static buffer is used
+ * and a pointer to that static buffer is returned.
+ *
+ * If the socket "s" is not connected, NULL is returned.
+ */
+
+int
+fdisdup(const int fd1, const int fd2);
+/*
+ * Tries to determine if file descriptor fd1 is a dup of fd2.
+ * Returns true if yes, false if not.
+ */
+
+
+int
+socks_rebind(int s, int protocol, struct sockaddr_storage *from,
+             const struct ruleaddr_t *to, char *emsg, const size_t emsglen);
+/*
+ * Tries to rebind the socket 's", currently bound to address "from", if
+ * any, to match the range given by "to".
+ *
+ * Returns 0 on success.
+ * Returns 0 on failure.  Error will be written to emsg and errno will be set.
+ */
+
+int
+socks_bindinrange(int s, struct sockaddr_storage *addr,
+                  in_port_t first, in_port_t last, const enum operator_t op);
+/*
+ * Like sockd_bind(), but keeps trying to sockd_bind a address in the
+ * range given by "addr", as indicated by "first", "last" and "op",
+ * until whole range has been tried.
+*/
+
+int
+socks_bind(int s, struct sockaddr_storage *addr, size_t retries);
+/*
+ * Binds the address "addr" to the socket "s".  The bind call will
+ * be tried "retries" + 1 times if the error is EADDRINUSE, or until
+ * successful, whatever comes first.
+ *
+ * If the port number is privileged, it will set and reset the euid
+ * as appropriate.  (Only applies when called called by server.)
+ *
+ * If successful, "addr" is filled in with the bound address.
+ * Returns:
+ *      On success: 0.
+ *      On failure:   -1
+ */
+
+const struct in_addr *
+ipv4_addrisinlist(const struct in_addr *addr, const struct in_addr *mask,
+                  const struct addrinfo *ailist);
+
+const struct in6_addr *
+ipv6_addrisinlist(const struct in6_addr *addr, const unsigned int maskbits,
+                  const struct addrinfo *ailist);
+
+/*
+ * Compares "addr", bitwise AND-ed with "mask", against each IPv4 or IPv6
+ * address * in "list", also bitwise AND-ed with "mask".
+ *
+ * Returns:
+ *      If "list" contains a element matching "addr": pointer to the matching
+                                                      address in ailist.
+ *      otherwise: NULL.
+ */
+
+
+int
+sockaddrareeq(const struct sockaddr_storage *a,
+              const struct sockaddr_storage *b, const size_t nocompare);
+/*
+ * Compares the address "a" against "b".
+ * If "nocompare" is not zero, the attributes set (ADDRINFO_PORT, etc.)
+ * are excluded from the comparison.
+ *
+ * Returns:
+ *      If "a" and "b" are equal: true
+ *      else: false
+ */
+
+
+void
+usrsockaddrcpy(struct sockaddr_storage *dst, const struct sockaddr_storage *src,
+               const size_t len);
+/*
+ * Duplicate contents of sockaddr structure, up to len bytes.
+ * Variant of sockaddrcpy() for sockaddr copying sockaddr data
+ * from clients in Rfoo() functions.
+ */
+
+void
+sockaddrcpy(struct sockaddr_storage *dst, const struct sockaddr_storage *src,
+            const size_t len);
+/*
+ * Duplicate contents of sockaddr structure, up to len bytes.
+ */
+
+sa_len_type
+salen(const sa_family_t family);
+/*
+ * returns the sockaddrlen of a sockaddr struct of family "family".
+ */
+
+sa_len_type
+inaddrlen(const sa_family_t family);
+/*
+ * returns the ipaddresslen of an address of the familytype "family".
+ */
+
+
+int
+safamily_issupported(const sa_family_t family);
+/*
+ * Returns true if we support the sockaddr family "family".
+ * Returns false if we do not.
+ */
+
+sa_family_t
+atype2safamily(const int atype);
+/*
+ * Returns the sa_family_t equivalent of the SOCKS address type
+ * "atype", which must be one of SOCKS_ADDR_IPV4 or SOCKS_ADDR_IPV6.
+ */
+
+int
+safamily2atype(const sa_family_t safamily);
+/*
+ * Returns the atype equivalent of the sa_family_t "safamily".
+ */
+
+
+int
+addrinfo_issupported(const struct addrinfo *ai);
+/*
+ * Returns true if we support the addrinfo in "ai".
+ * Returns false if we do not.
+ */
+
+
+const char *socks_strerror(const int err);
+/* returns a printable representation of the errno "errno". */
+
+
+size_t
+snprintfn(char *str, size_t size, const char *format, ...)
+      __ATTRIBUTE__((FORMAT(printf, 3, 4)))
+      __ATTRIBUTE__((__NONNULL__(3)))
+      __ATTRIBUTE__((__BOUNDED__(__string__, 1, 2)));
+/*
+ * Wrapper around snprintf() for consistent behavior.  Same as stdio
+ * snprintf() but the following are also enforced:
+ *      returns 0 instead of -1 (rawterminates *str) on error.
+ *      never returns a value greater than size - 1.
+ */
+
+void
+socks_sigblock(const int sig, sigset_t *oldset);
+/*
+ * If "sig" is -1, blocks all signals.  If not, adds only "sig" to
+ * the list of currently blocked signals.
+ *
+ * The old signal mask is returned in "oldset".
+ */
+
+void
+socks_sigunblock(const sigset_t *oldset);
+/*
+ * Restores the current signal mask to "oldset".
+ */
+
+
 const char *
-strcheck __P((const char *string));
+strcheck(const char *string);
 /*
  * Checks "string".  If it is NULL, returns a string indicating memory
  * exhausted, if not, returns the same string it was passed.
  */
 
-
 unsigned char *
-sockshost2mem __P((const struct sockshost_t *host, unsigned char *mem,
-						 int version));
+sockshost2mem(const sockshost_t *host, unsigned char *mem, int version);
 /*
  * Writes "host" out to "mem".  The caller must make sure "mem"
  * is big enough to hold the contents of "host".
@@ -1908,125 +2973,169 @@ sockshost2mem __P((const struct sockshost_t *host, unsigned char *mem,
  */
 
 const unsigned char *
-mem2sockshost __P((struct sockshost_t *host, const unsigned char *mem,
-						 size_t len, int version));
+mem2sockshost(sockshost_t *host, const unsigned char *mem, size_t len,
+      int version)
+      __ATTRIBUTE__((__BOUNDED__(__buffer__, 2, 3)));
 /*
  * Writes "mem", which is assumed to be a sockshost string
- * of version "version" in network order, out to "host".
+ * of length "len" in version "version" in network order, out to "host".
  * Returns:
- *		On success: pointer to one element past last byte used of mem
- *						and fills in "host" appropriately.
- *		On failure: NULL ("mem" is not a valid sockshost.)
+ *      On success: pointer to one element past last byte used of mem
+ *                  and fills in "host" appropriately.
+ *      On failure: NULL ("mem" is not a valid sockshost.)
  */
 
-#ifdef STDC_HEADERS
+unsigned int socks_get_responsevalue(const response_t *response);
+void socks_set_responsevalue(response_t *response, unsigned int value);
+/*
+ * Functions to fetch or set the value of the response, depending on what
+ * version the response belongs to.
+ */
+
+int *
+charmethod2intmethod(const size_t methodc,
+                     const unsigned char charmethodv[], int intmethodv[]);
+/*
+ * converts char method array "charmethodv" with "methodc" elements,
+ * to a integer method array, storing the result in "intmethodv".
+ *
+ * Returns "intmethodv".
+ */
+
+
+int
+proxyprotocolisknown(const int version);
+/*
+ * Returns true if "version" is a known proxy version.  0 if not.
+ */
+
+int
+authmethodisknown(const int method);
+/*
+ * Returns true if "method" is a known authmethod.  0 if not.
+ */
+
+int
+socks_addlogfile(logtype_t *logcf, const char *logfile);
+/*
+ * Adds the file "logfile" to the list of files we log to, stored in "logcf".
+ *
+ * Returns 0 on success.
+ * Returns -1 on failure.
+ */
+
 void slog(int priority, const char *fmt, ...)
-#else
-void slog()
-#endif  /* STDC_HEADERS */
-__attribute__ ((format (__printf__, 2, 3)));
+      __ATTRIBUTE__((FORMAT(printf, 2, 3)));
 /*
  * Logs message "fmt" at priority "priority" to previously configured
- * outputdevice.
+ * output device.
  * Checks settings and ignores message if it's of to low a priority.
  */
 
-#ifdef STDC_HEADERS
-void vslog(int priority, const char *fmt, va_list ap);
-#else
-void vslog();
-#endif  /* STDC_HEADERS */
+void vslog(int priority, const char *fmt, va_list ap, va_list apcopy)
+      __ATTRIBUTE__((FORMAT(printf, 2, 0)));
 /*
  * Same as slog() but assumes varargs/stdargs have already processed
  * the arguments.
  */
 
-int
-readconfig __P((const char *filename));
+void
+signalslog(const int priority, const char *msgv[]);
 /*
- * Parses the config stored in in the filename "filename".
+ * Similar to slog(), but simpler.
+ *
+ * "msgv" is an array of NUL-terminated strings.  The last element in this
+ * array must be NULL.
+ * The function logs all the strings in "msgv", as one.  Caller must take
+ * care of any desired space between the strings.
+ *
+ * Can be called from a signalhandler.
+ */
+
+
+
+int
+parseconfig(const char *filename);
+/*
+ * Parses the config stored in in the filename "filename", as well
+ * as environment-variables related.
+ *
  * Returns:
- *		On success: 0.
- *		On failure: -1.
+ *      On success: 0.
+ *      On failure: -1.
  */
 
-#ifdef STDC_HEADERS
 void
-yywarn (const char *fmt, ...)
-#else
-void
-yywarn()
-#endif  /* STDC_HEADERS */
-__attribute__ ((format (__printf__, 1, 2)));
+resetconfig(struct config *config, const int exiting);
 /*
- * Report a error related to (configfile) parsing.
+ * resets the config "config" back to default, freeing memory as well.
+ * If "exiting" is true, we are exiting and don't need to save
+ * anything.
  */
 
-#ifdef STDC_HEADERS
-void
-yyerror (const char *fmt, ...)
-#else
-void
-yyerror()
-#endif  /* STDC_HEADERS */
-__attribute__ ((format (__printf__, 1, 2)));
-/*
- * Report a error related to (configfile) parsing and exit.
- */
 
 int
-addressmatch __P((const struct ruleaddress_t *rule,
-						const struct sockshost_t *address, int protocol,
-						int ipalias));
+addrmatch(const ruleaddr_t *rule, const sockshost_t *address,
+          sockshost_t *addrmatched, int protocol, int ipalias);
 /*
  * Tries to match "address" against "rule".  "address" is resolved
- * if necessary.  "address" supports the wildcard INADDR_ANY and port of 0.
+ * if necessary.  "rule" supports the wildcard INADDR_ANY and port of 0.
  * "protocol" is the protocol to compare under.
- * If "ipalias" is true, the function will try to match any IP alias
- * "address"'s might have if appropriate, this can be useful to match
- * multihomed hosts where the client requests e.g a bind connection.
- * Returns true if "rule" matched "address".
+ *
+ * If "ipalias" is true and "address" is an IP-address, the function will
+ * try to reverse-map "address" to hostname, the hostname to ip, and match
+ * those ipaddresses against "rule".
+ *
+ * Returns true if "rule" matched "address".  In this case, if "addrmatched"
+ * is not NULL, it is updated to reflect the address that matched, which may
+ * be different from "address" if "address" had to be resolved or
+ * reversemapped.
  */
-
-struct hostent *
-hostentdup __P((const struct hostent *hostent));
-/*
- * Duplicates "hostent".
- * Returns:
- *		On success: a pointer to the duplicated hostent.
- *		On failure: NULL.
- */
-
-void
-hostentfree __P((struct hostent *hostent));
-/*
- * Free's all resourced used by "hostent", including "hostent"
- * itself.  If "hostent" is NULL, nothing is done.
- */
-
-
 
 int
-socks_connect __P((int s, const struct sockshost_t *host));
+socks_connecthost(int s,
+#if !SOCKS_CLIENT
+                  const interfaceside_t side,
+#endif /* !SOCKS_CLIENT */
+                  const sockshost_t *host,
+                  struct sockaddr_storage *laddr,
+                  struct sockaddr_storage *raddr,
+                  const long timeout, char *emsg, const size_t emsglen);
 /*
  * Tries to connect to "host".  If "host"'s address is not a IP address,
  * the function also tries to connect to any alias for "host"'s
  * name.  The connection is done using the open descriptor "s".
+ *
+ * If "laddr" is not NULL, it is filled in with the address we connected to
+ * "host" from, if a connect(2) was initiated.
+ *
+ * If "raddr" is not NULL, it is filled in with the address connected to if
+ * successful.  If "host" is a an ip address, it will be identical to that
+ * ip address, but if "host" is a hostname, they will of course differ.
+ *
+ * If "timeout" is not negative, it gives the timeout for how long to wait
+ * for the connect to complete.  A value of zero means no wait will be
+ * done, and the the function may return with errno set to EINPROGRESS.
+ * A negative value for timeout means wait the kernel/system default.
+ *
+ * If the function fails, the reason is written to emsg, which must be
+ * at least "emsglen" long.
+ *
  * Returns:
- *		On success: 0
- *		On failure: -1
+ *      On success: 0
+ *      On failure: -1.  Reason for error is written to emsg.
  */
 
-struct route_t *
-socks_connectroute __P((int s, struct socks_t *packet,
-								const struct sockshost_t *src,
-								const struct sockshost_t *dst));
+route_t *
+socks_connectroute(const int s, socks_t *packet,
+                   const sockshost_t *src, const sockshost_t *dst,
+                   char *emsg, const size_t emsglen);
 /*
  * Finds a route from "src" to "dst" and connects to it "s".
  * If src or dst is NULL, that argument is ignored.
  *
  * The route used may take into account the contents of "packet->req",
- * which is assumed to be the packet that will be sent to a socksserver,
+ * which is assumed to be the packet that will be sent to a socks server,
  * so it is recommended that it's contents be as conservative as possible.
  *
  * When it has successfully connected to a gateway it will set
@@ -2034,99 +3143,146 @@ socks_connectroute __P((int s, struct socks_t *packet,
  * should be offered.
  *
  * Returns:
- *		On success: the route that was used.
- *		On failure: NULL.  See errno for reason.  0 means no route exists.
+ *      On success: the route that was used.
+ *      On failure: NULL.  See emsg for reason.
  */
 
-
-struct request_t *
-socks_requestpolish __P((struct request_t *req, const struct sockshost_t *src,
-							   const struct sockshost_t *dst));
+route_t *
+socks_requestpolish(request_t *req, const sockshost_t *src,
+                    const sockshost_t *dst);
 /*
- * Tries to "polish" the request "req" so that a later socks_getroute()
- * will succeed.
+ * Tries to "polish" (modify) the request "req" for a session from "src"
+ * to "dst", so that a later socks_getroute() will succeed.
+ *
  * Returns:
- *		On success: "req".
- *		On failure: NULL.
+ *      On success: the route that will match the polished request.
+ *      On failure: NULL.
+ */
+
+int
+socks_routesetup(const int control, const int data, const route_t *route,
+                 char *emsg, const size_t emsglen);
+/*
+ * Prepares for establishing a session via route "route".
+ * "control" gives the controlsocket that will be used.
+ * "data" gives the data socket that will be used.
+ *
+ * Return 0 on success.
+ * Returns -1 on failure.  Reason for failure will be stored in "emsg", and
+ *                         errno will be set appropriately.
  */
 
 void
-showstate __P((const struct serverstate_t *state));
+showstate(const serverstate_t *state);
 /*
- * Shows "state".
+ * logs a printable representation of "state" to the logfile.
  */
 
 void
-showmethod __P((size_t methodc, const int *methodv));
+showmethod(objecttype_t type, size_t methodc, const int *methodv);
 /*
- * Shows "methodv".
+ * Shows methods set in "methodv" array.
+ * "type" indicates whether the methods are for a client/hostid-rule,
+ * and thus are clientmethods, or for a socksrule, and thus are socksmethods.
  */
 
-struct route_t *
-addroute __P((const struct route_t *route));
+void
+showtimeout(const timeout_t *timeout);
+/*
+ * shows timeouts set in "timeout".
+ */
+
+
+void
+freeroutelist(route_t *routehead);
+/*
+ * Frees a list of routes and their contents, starting at "routehead".
+ */
+
+route_t *
+socks_addroute(const route_t *route, const int last);
 /*
  * Appends a copy of "route" to our list of routes.
+ * If "last" is true, the route is added to the end of our list.
+ * If not, it's added to the start, and existing rule numbers are updated
+ * correspondingly.
+ *
  * Returns a pointer to the added route.
  */
 
+route_t *
+socks_autoadd_directroute(const command_t *commands,
+                          const protocol_t *protocols,
+                          const struct sockaddr_storage *saddr,
+                          const struct sockaddr_storage *netmask);
+/*
+ * Adds a direct route to "saddr", netmask "netmask", for the commands
+ * "commands" and protocols "protocols".
+ *
+ * Intended to be used for routes that are added automatically,
+ * and not via socks.conf.
+ */
+
 void
-showroute __P((const struct route_t *route));
+socks_showroute(const route_t *route);
 /*
  * prints the route "route".
  */
 
-
-struct route_t *
-socks_getroute __P((const struct request_t *req, const struct sockshost_t *src,
-						  const struct sockshost_t *dst));
+route_t *
+socks_getroute(const request_t *req, const sockshost_t *src,
+               const sockshost_t *dst);
 /*
  * Tries to find a  route to be used for a connection going from
  * "src" to "dst".
  * If src or dst is NULL, that argument is ignored.
  *
  * The route used may take into account the contents of "req", which is
- * assumed to be the packet that will be sent to a socksserver, so it is
+ * assumed to be the packet that will be sent to a socks server, so it is
  * recommended that it's contents be as conservative as possible.
  *
  * Returns:
- *		On success: pointer to route that should be used.
- *		On failure: NULL (no socks route found).
+ *      On success: pointer to route that should be used.
+ *      On failure: NULL (no route found).
  */
 
-
-unsigned char
-sockscode __P((int version, int code));
+unsigned int
+sockscode(const int version, const int code);
 /*
- * Maps the socks replycode "code", which is in non-version specific format,
- * to the equivalent replycode in version "version".
+ * Maps the socks reply code "code", which is in non-version specific format,
+ * to the equivalent reply code in version "version".
  */
 
-unsigned char
-errno2reply __P((int errnum, int version));
+unsigned int
+errno2reply(int errnum, int version);
 /*
- * Returns the socks version "version" reply code for a error of type "errno".
+ * Returns the proxy version "version" reply code for a error of type "errno".
  */
 
 char *
-str2vis __P((const char *string, size_t len));
+str2vis(const char *string, size_t len, char *visstring, size_t vislen)
+      __ATTRIBUTE__((__BOUNDED__(__string__, 3, 4)));
 /*
- * Visually encodes exactly "len" chars of "string".
- * Returns:
- *		On success: the visually encoded string, to be free()'ed by caller.
- *		On failure: NULL.  (out of memory).
+ * Visually encodes exactly "len" chars of "string" and stores the
+ * result in "visstring", which is of length "vislen".  "vislen" should
+ * be at least "len" * 4 + 1.
+ * Note that the function really will encode len characters, including
+ * any NUL-characters.
+ *
+ * Returns: the visually encoded string, "visstring".
  */
 
 in_addr_t
-socks_addfakeip __P((const char *name));
+socks_addfakeip(const char *name);
 /*
  * Adds "name" to a internal table indexed by (fake)IP addresses.
  * Returns:
- *		On success: "name"'s index.
- *		On failure:	INADDR_NONE
+ *      On success: "name"'s index.
+ *      On failure:   INADDR_NONE
  */
 
 const char *
-socks_getfakehost __P((in_addr_t addr));
+socks_getfakehost(in_addr_t addr);
 /*
  * If "addr" is a "fake" (non-resolved) addr, it returns the name
  * corresponding to it.
@@ -2134,312 +3290,273 @@ socks_getfakehost __P((in_addr_t addr));
  */
 
 int
-socks_getfakeip __P((const char *host, struct in_addr *addr));
+socks_getfakeip(const char *host, struct in_addr *addr);
 /*
  * If "host" has a fake address entry, the address is written into
  * "addr".
  * Returns:
- *		If a fake address exits: 1
- *		Else: 0
+ *      If a fake address exits: true
+ *      Else: false
  */
 
-struct sockshost_t *
-fakesockaddr2sockshost __P((const struct sockaddr *addr,
-									 struct sockshost_t *host));
+sockshost_t *
+fakesockaddr2sockshost(const struct sockaddr_storage *addr, sockshost_t *host);
 /*
  * Identical to sockaddr2sockshost, but checks whether
  * the address in "addr" is a "fake" one when converting.
  */
 
 int
-sockaddrareeq __P((const struct sockaddr *a, const struct sockaddr *b));
+sockshostareeq(const sockshost_t *a, const sockshost_t *b);
 /*
  * Compares the address "a" against "b".
  * Returns:
- *		If "a" and "b" are equal: true
- *		else: false
+ *      If "a" and "b" are equal: true
+ *      else: false
  */
 
 int
-sockshostareeq __P((const struct sockshost_t *a, const struct sockshost_t *b));
-/*
- * Compares the address "a" against "b".
- * Returns:
- *		If "a" and "b" are equal: true
- *		else: false
- */
-
-int
-fdsetop __P((int nfds, int op, const fd_set *a, const fd_set *b,
-				 fd_set *result));
+fdsetop(int highestfd, int op, const fd_set *a, const fd_set *b,
+        fd_set *result);
 /*
  * Performs operation on descriptor sets.
- * "nfds" is the number of descriptors to perform "op" on in the sets
- * "a" and "b".
- * "op" is the operation to be performed on the descriptor sets and
- * can take on the value of standard C bitwise operators.
+ * "highestfd" is the descriptors with the highest index to perform operation
+ * "op" on in the sets "a" and "b".
+ *
  * The result of the operation is stored in "result".
  *
  * Returns the number of the highest descriptor set in "result".
  * NOTES:
- *		Operators supported is: AND ('&') and XOR ('^')
+ *      - operators supported is: AND ('&'), XOR ('^'), and OR ('|').
  */
 
 int
-methodisset __P((int method, const int *methodv, size_t methodc));
+methodisset(int method, const int *methodv, size_t methodc);
 /*
  * Returns true if the method "method" is set in "methodv", false otherwise.
  * "methodc" is the length of "methodv".
  */
 
-int
-socketoptdup __P((int s));
+
+char *
+get_tcpinfo(const size_t fdc, int fdv[], char *buf, size_t buflen);
 /*
- * Duplicates the settings of "s" and returns a new socket with the
- * same settings.
+ * Retrieves tcp_info for the socket "s" and stores it in "buf", if
+ * buf is not NULL.
+ * If buf or buflen is not set, stores it in locally allocated memory
+ * and return a pointer to it rather than to buf.
+ *
+ * If tcpinfo can not be retrieved for any of the sockets in fdv,
+ * that index in fdv is set to -1.
+ *
  * Returns:
- *		On success: the descriptor for the new socket
- *		On failure: -1
+ *    String with tcpinfo values, or NULL if no tcpinfo could be retrieved.
  */
 
 int
-socks_mklock __P((const char *template));
+socketoptdup(int s, int new_s);
 /*
- * Creates a filedescriptor that can be used with socks_lock() and
- * socks_unlock().
+ * Duplicates the settings of "s" onto "new_s".  If "new_s" is -1,
+ * a new socket is created for it.
+ *
  * Returns:
- *		On success: filedescriptor
- *		On failure: -1
- */
-
-int
-socks_lock __P((int fd, int type, int timeout));
-/*
- * Looks the filedescriptor "fd".
- * "type" is the type of lock; F_RDLCK or F_WRLCK.
- * "timeout" is how long to wait for lock, supported values:
- *		-1: forever.
- *		0 : don't wait.
- * Returns:
- *		On success: 0
- *		On error  : -1
+ *      On success: new_s (or the descriptor for the new socket if new_s is -1).
+ *      On failure: -1
  */
 
 void
-socks_unlock __P((int d));
+socketoptioncheck(const socketoption_t *option);
 /*
- * Unlocks the filedescriptor "d", previously locked by this process.
+ * Check socketoption arguments against sockopt_t entry.
  */
 
 int
-bitcount __P((unsigned long number));
+addedsocketoption(size_t *optc, socketoption_t **optv,
+                  const socketoption_t *newoption);
+/*
+ * Adds the socketoption "newoption" to the list of current options
+ * in the socketoption array "optv".
+ *
+ * Returns true on success. false on failure.
+ */
+
+void setconfsockoptions(const int target, const int in, const int protocol,
+                        const int isclientside,
+                        const size_t optc, const socketoption_t *optv,
+                        const int whichlocals, const int whichglobals);
+/*
+ * Sets the options in "optv" on the socket "target", presumably loaded from
+ * the sockd.conf.  "target" should be a socket of the type indicated by
+ * protocol (SOCKS_TCP or SOCKS_UDP).
+ *
+ * If "in" is not -1, it indicates the socket the socket a connection from
+ * a client came in from, and perhaps the reason "target" was created.
+ * This is used in some special cases where we need to copy some special
+ * options from the client connection (e.g., hostids).
+ *
+ * "isclientside" indicates whether "s" is a socket for the internal (client)
+ * or external interface.
+ *
+ * "whichglobals" indicates what global (not rule/route-specific) options
+ * configured should be checked at this time, and "whichlocals" the
+ * same for the options in optv.
+ */
+
+int
+socks_mklock(const char *template, char *newname, const size_t newnamelen);
+/*
+ * Creates a file that can be used with socks_lock() and
+ * socks_unlock().  Returns the file descriptor of the created file.
+ * If "newname" or "newnamelen" is zero, the created file is unlinked.
+ * Otherwise the file is not unlinked and the name of the created file is
+ * is saved to newname.
+ *
+ * Returns:
+ *      On success: file descriptor
+ *      On failure: -1
+ */
+
+int
+socks_lock(const int fd, const off_t offset, const off_t len,
+           const int exclusive, const int wait);
+/*
+ * Looks the file descriptor "fd" at offset "offset", length "len".
+ * If "exclusive" is true, the lock is exclusive.  If not, it is shared.
+ * If "wait" is true, wait for the lock.  If not, return if the lock
+ * can not be taken.
+ *
+ * Upgrade/downgrade to/from exclusive is permitted.
+ *
+ * Returns:
+ *      On success: 0
+ *      On error  : -1
+ */
+
+void
+socks_unlock(int d, const off_t offset, const off_t len);
+/*
+ * Unlocks the file descriptor "d", previously locked by this process,
+ * at offset "offset", length "len".
+ */
+
+int
+bitcount(unsigned long number);
 /*
  * Returns the number of bits set in "number".
  */
 
+int
+bitcount_in6addr(const struct in6_addr *in6addr);
+/*
+ * Returns the number of bits set in "in6addr".
+ */
+
+
 #if SOCKSLIBRARY_DYNAMIC
-struct hostent *sys_gethostbyaddr __P((const char *addr, int len, int af));
-struct hostent *sys_gethostbyname __P((const char *));
-struct hostent *sys_gethostbyname2 __P((const char *, int));
+/*
+ * Here because they may be indirectly used by the server too, when it
+ * executes external library code (e.g., libwrap).
+ */
+
+struct hostent *sys_gethostbyaddr(const char *addr, socklen_t len, int af);
+struct hostent *sys_gethostbyname(const char *);
+struct hostent *sys_gethostbyname2(const char *, int);
+
 #if HAVE_GETADDRINFO
-int sys_getaddrinfo __P((const char *nodename, const char *servname,
-			 				const struct addrinfo *hints, struct addrinfo **res));
+int sys_getaddrinfo(const char *nodename, const char *servname,
+                    const struct addrinfo *hints, struct addrinfo **res);
 #endif /* HAVE_GETADDRINFO */
+
 #if HAVE_GETIPNODEBYNAME
-struct hostent *sys_getipnodebyname __P((const char *name, int af, int flags,
-					 int *error_num));
+struct hostent *sys_getipnodebyname(const char *name, int af, int flags,
+                                    int *error_num);
 #endif /* HAVE_GETIPNODEBYNAME */
+
+#if SOCKS_CLIENT
+#if HAVE___FPRINTF_CHK
+HAVE_PROT_FPRINTF_0 __fprintf_chk(HAVE_PROT_FPRINTF_1 stream, int dummy,
+              HAVE_PROT_FPRINTF_2 format, ...);
+#endif /* HAVE___FPRINTF_CHK */
+
+#if HAVE___VFPRINTF_CHK
+HAVE_PROT_VFPRINTF_0 __vfprintf_chk(HAVE_PROT_VFPRINTF_1 stream,
+      int dummy, HAVE_PROT_VFPRINTF_2 format, HAVE_PROT_VFPRINTF_3 ap);
+#endif /* HAVE___VFPRINTF_CHK */
+#endif /* SOCKS_CLIENT */
+
 #endif /* SOCKSLIBRARY_DYNAMIC */
 
-#if defined(DEBUG) || HAVE_SOLARIS_BUGS
-
 int
-freedescriptors __P((const char *message));
+httpproxy_negotiate(int control, socks_t *packet,
+                    char *emsg, const size_t emsglen);
 /*
- * Returns the number on unallocated descriptors.
- */
-
-#endif /* DEBUG) || HAVE_SOLARIS_BUGS */
-
-
-#ifdef DEBUG
-
-int
-fd_isset __P((int fd, fd_set *fdset));
-/* function version of FD_ISSET() */
-
-#endif /* DEBUG */
-
-/* replacements */
-
-#if !HAVE_DAEMON
-int daemon __P((int, int));
-#endif  /* !HAVE_DAEMON */
-
-#if !HAVE_GETDTABLESIZE
-/* return upper limit on per-process open file descriptors */
-int getdtablesize __P((void));
-#endif  /* !HAVE_GETDTABLESIZE */
-
-#if !HAVE_VSNPRINTF
-# ifdef STDC_HEADERS
-int snprintf __P((char *, size_t, char const *, ...));
-# else
-int snprintf ();
-# endif /* STDC_HEADERS */
-int vsnprintf __P((char *, size_t, const char *, va_list));
-#endif /* !HAVE_VSNPRINTF */
-
-#if !HAVE_SETPROCTITLE
-#ifdef STDC_HEADERS
-void setproctitle __P((const char *fmt, ...))
-__attribute__ ((format (__printf__, 1, 2)));
-int initsetproctitle __P((int, char **, char **));
-#else
-void setproctitle()
-__attribute__ ((format (__printf__, 1, 2)));
-int initsetproctitle __P((int, char **, char **));
-#endif  /* STDC_HEADERS */
-#endif  /* !HAVE_SETPROCTITLE */
-
-#if !HAVE_SOCKATMARK
-int sockatmark __P((int));
-#endif  /* !HAVE_SOCKATMARK */
-
-#if !HAVE_INET_ATON
-int inet_aton __P((register const char *cp, struct in_addr *addr));
-#endif  /* ! HAVE_ATON */
-
-#if !HAVE_GETDTABLESIZE
-int getdtablesize __P((void));
-#endif  /* ! HAVE_GETDTABLESIZE */
-
-#if !HAVE_STRERROR
-char *__strerror __P((int, char *));
-char *strerror __P((int));
-const char *hstrerror __P((int));
-#endif  /* !HAVE_STRERROR */
-
-#if !HAVE_MEMMOVE
-void * memmove __P((void *, const void *, register size_t));
-#endif  /* !HAVE_MEMMOVE */
-
-#if !HAVE_INET_PTON
-int inet_pton __P((int af, const char *src, void *dst));
-#endif
-
-#if !HAVE_ISSETUGID
-int issetugid __P((void));
-#endif  /* !HAVE_ISSETUGID */
-
-#if !HAVE_VSYSLOG
-void vsyslog __P((int, const char *, va_list));
-#endif  /* !HAVE_VSYSLOG */
-
-#if !HAVE_GETIFADDRS
-int getifaddrs __P((struct ifaddrs **));
-void freeifaddrs __P((struct ifaddrs *));
-#endif /* !HAVE_GETIFADDRS */
-
-struct passwd *
-socks_getpwnam __P((const char *login));
-/*
- * Like getpwnam() but works around sysv bug, tries to get the shadow
- * password too.
- */
-
-int
-msproxy_negotiate __P((int s, int control, struct socks_t *packet));
-/*
- * Negotiates with the msproxy server connected to "control".
- * "s" gives the socket to be used for dataflow.
- * "packet" contains the request and on return from the function
- * contains the response.
+ * Negotiates a session to be used with the server connected to "control".
+ * "packet" is the packet with information about what we want the
+ * server to do for us.
+ * packet->res.reply will be set according to the result of negotiation.
  * Returns:
- *		On success: 0 (server replied to our request).
- *		On failure: -1
- */
-
-
-int
-send_msprequest __P((int s, struct msproxy_state_t *state,
-						  struct msproxy_request_t *packet));
-/*
- * Sends a msproxy request to "s".
- * "state" is the current state of the connection to "s",
- * "packet" is the request to send.
+ *      On success: 0 (server accepted our request).
+ *      On failure: -1.  "emsg" will contain the details.
  */
 
 int
-recv_mspresponse __P((int s, struct msproxy_state_t *state,
-						  struct msproxy_response_t *packet));
+upnp_negotiate(const int s, socks_t *packet, gateway_t *gw,
+               char *emsg, const size_t emsglen);
 /*
- * Receives a msproxy response from "s".
- * "state" is the current state of the connection to "s",
- * "packet" is the memory the response is read into.
- */
-
-int
-msproxy_sigio __P((int s));
-/*
- * Must be called on sockets where we expect the connection to be forwarded
- * by the msproxy server.
- * "s" is the socket and must have been added with socks_addaddr() beforehand.
+ * Negotiates a session to be used with the upnp server.
+ * If the request is for a i/o operation, socket is the socket to be used
+ * for performing the i/o.
+ *
+ * "packet" is the packet with information about what we want the
+ * server to do for us.
+ *
+ * "gw" is the upnp gateway to used.
+ *
+ * packet->res.reply will be set according to the result of negotiation.
+ *
  * Returns:
- *		On success: 0
- *		On failure: -1
+ *      On success: 0 (server accepted our request).
+ *                  Note that we do not need to contact the UPNP router
+ *                  for all requests.  If we do not need to contact it for
+ *                  the given request, we will just pretend everything is ok.
+ *
+ *      On failure: -1.  "emsg" will contain the details.
  */
 
 int
-msproxy_init __P((void));
-/*
- * inits things for using a msproxyserver.
- *		On success: 0
- *		On failure: -1
- */
-
-int
-httpproxy_negotiate __P((int control, struct socks_t *packet));
-/*
- * Negotiates a method to be used when talking with the server connected
- * to "s".  "packet" is the packet that will later be sent to server.
- * packet->res.reply will be set depending on the result of negotiation.
- * Returns:
- *		On success: 0 (server accepted our request).
- *		On failure: -1.
- */
-
-
-int
-socks_negotiate __P((int s, int control, struct socks_t *packet,
-							struct route_t *route));
+socks_negotiate(int s, int control, socks_t *packet, route_t *route,
+                char *emsg, const size_t emsglen);
 /*
  * "s" is the socket data will flow over.
  * "control" is the control connection to the socks server.
  * "packet" is a socks packet containing the request.
- *	"route" is the connected route.
+ *   "route" is the connected route.
  * Negotiates method and fills the response to the request into packet->res.
+ *
  * Returns:
- *		On success: 0 (server replied to our request).
- *		On failure: -1.
+ *      On success: 0 (server replied to our request).
+ *      On failure: -1.  Reason is stored in "emsg" and errno is set.
  */
 
 int
-serverreplyisok __P((int version, int reply, struct route_t *route));
+serverreplyisok(const unsigned int version, const unsigned int command,
+                const unsigned int reply, route_t *route,
+                char *emsg, const size_t emsglen);
 /*
- * "replycode" is the reply code returned by a socksserver of version
+ * "replycode" is the reply code returned by a socks server of version
  * "version".
- * "route" is the route that was used for the socksserver.  If
- * the errorcode indicates a serverfailure, it might be "badrouted".
- * Returns true if the reply indicates request succeeded, false otherwise
- * and sets errno accordingly.
+ * "route" is the route that was used for the socks server.
+ * If the error code indicates a server failure, the route might be
+ * "blacklisted".
+ *
+ *  On success: true.
+ *  On failure: false.  Reason is stored in "emsg" and errno is set.
  */
 
-
-struct route_t *
-socks_nbconnectroute __P((int s, int control, struct socks_t *packet,
-								  const struct sockshost_t *src,
-								  const struct sockshost_t *dst));
+route_t *
+socks_nbconnectroute(int s, int control, socks_t *packet,
+                     const sockshost_t *src, const sockshost_t *dst,
+                     char *emsg, const size_t emsglen);
 /*
  * The non-blocking version of socks_connectroute(), only used by client.
  * Takes one additional argument, "s", which is the socket to connect
@@ -2447,66 +3564,489 @@ socks_nbconnectroute __P((int s, int control, struct socks_t *packet,
  */
 
 void
-socks_badroute __P((struct route_t *route));
+socks_blacklist(route_t *route, const char *reason);
 /*
  * Marks route "route" as bad.
+ * "reason" is a short reason describing why we are blacklisting this route.
+ */
+
+void
+socks_clearblacklist(route_t *route);
+/*
+ * Clears bad marks on route.
  */
 
 int
-negotiate_method __P((int s, struct socks_t *packet));
+methodisvalid(const int method, objecttype_t ruletype);
+/*
+ * Returns true if "method" is a valid method for rules of type
+ * "ruletype".
+ */
+
+int
+negotiate_method(int s, socks_t *packet, route_t *route,
+                 char *emsg, const size_t emsglen);
 /*
  * Negotiates a method to be used when talking with the server connected
- * to "s".  "packet" is the packet that will later be sent to server,
- * only the "auth" element in it will be set but other elements are needed
- * too.
+ * to "s".
+ * "packet" is the packet that will later be sent to server, and only
+ * the "auth" element in it will be set but other elements are needed
+ * for reading too.
+ * "route" is the route selected for connecting to the socks-server.
+ *
  * Returns:
- *		On success: 0
- *		On failure: -1
+ *      On success: 0
+ *      On failure: -1.  "emsg" will contain the details.
  */
 
-
 int
-clientmethod_uname __P((int s, const struct sockshost_t *host, int version,
-								unsigned char *name, unsigned char *password));
+clientmethod_uname(int s, const sockshost_t *host, int version,
+                   unsigned char *name, unsigned char *password,
+                   char *emsg, size_t emsglen);
 /*
- * Enters username/password negotiation with the socksserver connected to
+ * Enters username/password negotiation with the socks server connected to
  * the socket "s".
  * "host" gives the name of the server.
- * "version" gives the socksversion established to use.
+ * "version" gives the socks version established to use.
  * "name", if not NULL, gives the name to use for authenticating.
  * "password", if not NULL, gives the name to use for authenticating.
  * Returns:
- *		On success: 0
- *		On failure: whatever the remote socksserver returned as status.
+ *      On success: 0
+ *      On failure: -1.  "emsg" will contain the details.
  */
 
+#if HAVE_GSSAPI
+int
+clientmethod_gssapi(int s, int protocol, const gateway_t *gw,
+                    int version, authmethod_t *auth,
+                    char *emsg, const size_t emsglen);
+/*
+ * Enters gssapi negotiation with the socks server connected to
+ * the socket "s".
+ * "gw" gives the name of the gateway.
+ * "version" gives the socks version established to use.
+ * "*auth", authentication structure
+ * Returns:
+ *      On success: 0
+ *      On failure: -1.  "emsg" will contain the details.
+ */
 
+int
+gssapi_encode(const gss_buffer_t in, gssapi_state_t *gs, gss_buffer_t out);
+/*
+ * gssapi encodes the data in "in", storing the encoded message
+ * in "out", which contains a pointer to the previously allocated
+ * memory of the specified length.
+ *
+ * "gs" contains details about gssapi context.
+ *
+ * Returns:
+ *    On success: 0
+ *    On failure: -1
+ */
+
+int
+gssapi_decode(const gss_buffer_t in, gssapi_state_t *gs, gss_buffer_t out);
+/*
+ * gssapi decodes the data in "in", storing the decoded message
+ * in "out", which contains a pointer to the previously allocated
+ * memory of the specified length.
+ *
+ * "gs" contains details about gssapi context.
+ *
+ * Returns:
+ *    On success: 0
+ *    On failure: -1
+ */
+
+#endif /* HAVE_GSSAPI */
+
+
+int socks_yyparse(void);
+int socks_yylex(void);
+
+int
+socks_sendrequest(int s, const request_t *request,
+                  char *emsg, const size_t emsglen);
+/*
+ * Sends the request "request" to the socks server connected to "s".
+ * Returns:
+ *      On success: 0
+ *      On failure: -1.  Reason is stored in "emsg" and errno is set.
+ */
+
+int
+socks_recvresponse(int s, response_t *response, int version,
+                   char *emsg, const size_t emsglen);
+/*
+ * Receives a socks response from the "s".  "response" is filled in with
+ * the data received.
+ * "version" is the protocol version negotiated.
+ *
+ * Returns:
+ *      On success: 0
+ *      On failure: -1.  Reason is stored in "emsg" and errno is set.
+ */
+
+iobuffer_t *
+socks_allocbuffer(const int s, const int type);
+/*
+ * Returns the iobuffer allocated to file descriptor "s", or
+ * a new free one if none is allocated.
+ * "type" gives the type of socket "s" is, SOCK_STREAM or SOCK_DGRAM.
+ *
+ * It is an error if a new buffer is allocated to "s" before the old
+ * one has been freed.
+ */
 
 void
-checkmodule __P((const char *name));
+socks_initbuffer(const int fd, const int stype, iobuffer_t *iobuf);
+
+iobuffer_t *
+socks_getbuffer(const int s);
 /*
- * Checks that the system has the module "name" and permission to use it.
- * Aborts with a errormessage if not.
+ * Returns the iobuffer allocated to file descriptor "s".
  */
 
-int socks_yyparse __P((void));
-int socks_yylex __P((void));
+void
+socks_freebuffer(const int s);
+/*
+ * Marks the iobuffer allocated to file descriptor "s" as free.
+ * It is not an error if no iobuffer is currently allocate dto "s".
+ */
+
+void
+socks_reallocbuffer(const int old, const int new);
+/*
+ * Reallocs the buffer assigned to "old", if any, to instead be assigned
+ * to "new".
+ */
+
+void
+socks_clearbuffer(const int s, const whichbuf_t type);
+/*
+ * Clears the iobuffer belonging to "s".
+ * "type" gives the buffer-type that should be cleared, READ_BUF or WRITE_BUF.
+ */
+
+int socks_flushbuffer(const int s, const ssize_t len,
+                      sendto_info_t *sendtoflags);
+/*
+ * Tries to flush the data buffered for file descriptor "s".  If "s" is -1,
+ * data for all descriptors is flushed.
+ *
+ * If "len" is -1, tries to flush all data on that fd, otherwise only flushes
+ * up to "len" bytes.
+ *
+ * If "sendtoflags" is not NULL, it is updated appropriately.
+ *
+ * Returns 0 if all data, if any was flushed.
+ * Returns -1 otherwise.
+ */
+
+void
+socks_setbuffer(iobuffer_t *iobuf, const int mode, ssize_t bufsize);
+
+void
+socks_setbufferfd(const int fd, const int mode, ssize_t bufsize);
+
+/*
+ * The above two functions perform the same operation, but one takes
+ * a fd as the id to identify the iobuf and results in a no-op if no iobuf
+ * is allocated to the fd, while the other takes the iobuf directly.
+ *
+ * Sets a flag in the iobuf belonging to "fd", indicating data should
+ * not be be written before a flush is done, the buffer becomes full,
+ * or "another good reason" is given, according to "mode".
+ * "mode" can take the same values as the corresponding argument
+ * to setvbuf(3).
+ *
+ * "bufsize" is the size of buffer to use.  "bufsize" for the read buffer
+ * and "bufsize" for the writebuffer.  Can not be larger than SOCKD_BUFSIZE.
+ * Use -1 for a default value (SOCKD_BUFSIZE).
+ */
+
+size_t socks_addtobuffer(const int s, const whichbuf_t which,
+                         const int encoded, const void *data,
+                         const size_t datalen)
+       __ATTRIBUTE__((__BOUNDED__(__buffer__, 4, 5)));
+/*
+ * Adds "data", of length "datalen" to the buffer belonging to "s".
+ * "which" must have one of the values WRITE_BUF or READ_BUF, to
+ * indicate what part of the buffer to add the data to;
+ * READ_BUF : data that has been read from the socket.
+ * WRITE_BUF: data that should be written to the socket.
+ *
+ * Returns the number of bytes added.
+ */
+
+size_t
+socks_getfrombuffer(const int s, const size_t flags, const whichbuf_t which,
+                    const int encoded, void *data, size_t datalen)
+                    __ATTRIBUTE__((__BOUNDED__(__buffer__, 5, 6)));
+
+/*
+ * Copies up to "datalen" bytes from the iobuf belonging to "s".
+ *
+ * Flags can be either 0 or MSG_PEEK.  If MSG_PEEK, the data read
+ * from the buffer will not be removed.
+ *
+ * "which" must have one of the values WRITE_BUF or READ_BUF, to
+ * indicate what part of the buffer to copy the data from.
+ *
+ * Returns the number of bytes copied.
+ */
+
+size_t
+socks_bytesinbuffer(const int s, const whichbuf_t which, const int encoded);
+/*
+ * Returns the number of bytes currently in the iobuf belonging to "s".
+ */
+
+int
+socks_bufferhasbytes(const int s, const whichbuf_t which);
+/*
+ * Returns true if any of the buffers (encoded or decoded) belonging
+ * to "s" has data in it.
+ * Intended to be faster than calling socks_bytesinbuffer() twice,
+ * once for each buffer (encoded/decoded).
+ */
+
+size_t
+socks_freeinbuffer(const int s, const whichbuf_t which);
+/*
+ * Returns the number of bytes free in the iobuf belonging to "s".
+ */
+
+#if HAVE_LIVEDEBUG
+
+void
+socks_flushrb(void);
+/*
+ * Flushes the ringbuffer to log(s).
+ */
+
+#endif /* HAVE_LIVEDEBUG */
 
 
-__END_DECLS
+fd_set *
+allocate_maxsize_fdset(void);
+/*
+ * Allocate a fd_set big enough to hold the highest file descriptor
+ * we could possibly use.
+ * Returns a pointer to the allocated fd_set, or exits on failure.
+ */
+
+rlim_t
+getmaxofiles(limittype_t type);
+/*
+ * Return max number of open files for process.
+ * If type is softlimit, the current limit is returned.
+ * If type is hardlimit, the absolute maximum value is returned.
+ */
+
+char *
+socks_getusername(const sockshost_t *host, char *buf, size_t buflen)
+      __ATTRIBUTE__((__BOUNDED__(__string__, 2, 3)));
+/*
+ * Tries to determine the username of the current user, to be used
+ * when negotiating with the server "host".
+ * The NUL-terminated username is written to "buf", which is of size
+ * "buflen".
+ * Returns:
+ *      On success: pointer to "buf" with the username.
+ *      On failure: NULL.
+ */
+
+char *
+socks_getpassword(const sockshost_t *host, const char *user,
+      char *buf, size_t buflen);
+/*
+ * Tries to determine the password of user "user", to be used
+ * when negotiating with the server "host".
+ * The NUL-terminated password is written to "buf", which is of length
+ * "buflen"
+ * Returns:
+ *      On success: pointer to "buf" with the password.
+ *      On failure: NULL.
+ */
+
+char *
+socks_getenv(const char *name, value_t value);
+/*
+ * Depending on how the program was ./configured and on what
+ * platform it runs, getenv(3) may or may not be disabled for
+ * some names, for security reasons.
+ *
+ * This wrapper will return NULL if getenv(3) is disabled,
+ * otherwise it will return the result of getenv(3).
+ *
+ * In addition, if "value" is not "dontcare", the function will
+ * also compare the value returned by getenv(3), if any, to
+ * see it it matches the value described by "value".  If they don't
+ * match, the function will return NULL.
+ */
+
+int
+socks_msghaserrors(const char *prefix, const struct msghdr *msg);
+/*
+ * Checks if "msg", as received via recvmsg(2), was truncated or
+ * had other detectable errors, and reports it if so.
+ * If reporting, "prefix" should contain information about where
+ * the message was received.
+ *
+ * Returns true if "msg" has errors, "false" if not.
+ */
+
+void seconds2days(unsigned long *seconds, unsigned long *days,
+                  unsigned long *hours, unsigned long *minutes);
+/*
+ * Converts "seconds" to the corresponding number of days, hours, minutes,
+ * and seconds.
+ * Upon return, the days, hours, minutes, and seconds are stored in the
+ * passed arguments.
+ */
+
+void
+showconfig(const struct config *config);
+/*
+ * prints out config "config".
+ */
+
+void
+sockopts_dump(void);
+/*
+ * list all known socket option information
+ */
+
+const sockopt_t *
+optname2sockopt(char *optname);
+/*
+ * return pointer to the socket option with the given name or NULL on failure.
+ */
+
+const sockopt_t *
+optval2sockopt(int level, int optval);
+/*
+ * return pointer to the socket option with the the name "optname"
+ * at the socket level "level", or NULL if no such option is known at
+ * the given socket level.
+ */
+
+const sockopt_t *
+optid2sockopt(size_t optid);
+/*
+ * return a pointer to the sockopt_t entry identified by "optid".
+ */
+
+const sockoptvalsym_t *
+optval2valsym(size_t optid, char *name);
+/*
+ * returns a pointer to the sockoptvalsym entry if "name" is a valid symbolic
+ * name for the socketoption indicated by "optid", or NULL if no matching
+ * entry is found.
+ */
+
+#if HAVE_SOCKS_HOSTID
+unsigned char
+getsockethostid(const int s, const size_t addrc, struct in_addr addrv[]);
+/*
+ * Gets the hostids set on socket "s" and stores them in "addrv", which must
+ * be big enough to hold at least "addrc" elements.
+ *
+ * Returns the number of hostids set on socket "s".
+ * If none are set, 0 is returned.
+ */
+
+int
+setsockethostid(const int s, const size_t addrc, struct in_addr addrv[]);
+/*
+ * Sets the hostids in "addrv", which contains "addrc" hostids, on socket
+ * "s".
+ *
+ * Returns 0 on success, -1 on failure.
+ */
+#endif /* HAVE_SOCKS_HOSTID */
+
+
+#if COVENANT
+char *socks_decode_base64(char *in, char *out, size_t outlen);
+char *socks_strcasestr(const char *a, const char *b);
+#endif /* COVENANT */
 
 #if SOCKSLIBRARY_DYNAMIC
 #include "interposition.h"
 #endif /* SOCKSLIBRARY_DYNAMIC */
 
-/* XXX */
-#if defined(SOCKS_CLIENT) || defined(SOCKS_SERVER)
 #if SOCKS_CLIENT
 #include "socks.h"
-#endif
-#if SOCKS_SERVER
+#else /* SOCKS_SERVER */
 #include "sockd.h"
-#endif  /* SOCKS_CLIENT */
-#endif  /* SOCKS_CLIENT || SOCKS_SERVER */
+#endif /* SOCKS_SERVER */
 
 #include "tostring.h"
+#include "fmt.h"
+
+#if HAVE_GSSAPI
+#include "socks_gssapi.h"
+#endif /* HAVE_GSSAPI */
+
+void
+slogstack(void);
+/*
+ * Prints the current stack.
+ */
+
+int
+socks_getifaddrs(struct ifaddrs **ifap);
+/*
+ * Wrapper around getifaddrs(3) that does some extra work that should
+ * not cause any problems.
+ */
+
+
+int
+socks_inet_pton(const int af, const void *src, void *dst, uint32_t *dstscope);
+/*
+ * Like inet_pton(3), but calls getaddrinfo(3) to get the address instead
+ * if "src" contains something that looks like a scope id (%id).  If so,
+ * the scopeid is stored in "dstscope", provided "dstscope" is not NULL.
+ *
+ * Returns the same values as inet_pton().
+ */
+
+void
+set_hints_ai_family(int *ai_family);
+/*
+ * Sets the "ai_family" member of a strut addrinfo "hints" object
+ * appropriately for our use, according to whether we have usable
+ * IPv6 addresses configured or not.
+ */
+
+int
+makedummyfd(const sa_family_t safamily, const int socktype);
+/*
+ * Creates a dummy socket of the appropriate type, or the easiest/fastest
+ * type if both safamily and socktype are zero.
+ */
+
+
+/*
+ * Makes a dummy filedescriptor and returns it's index, or -1 on failure.
+ */
+
+#if DEBUG
+
+void
+printsocketopts(const int s);
+/*
+ * prints socket options and other flags set on the socket "s".
+ */
+
+int
+fd_isset(int fd, fd_set *fdset);
+/* function version of FD_ISSET() */
+
+#endif /* DEBUG */
+
+#endif /* !_COMMON_H_ */
