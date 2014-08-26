@@ -1,1 +1,1 @@
-usr/lib/libdsocksd.so.* usr/lib
+usr/lib/libdsocksd.so* usr/lib
