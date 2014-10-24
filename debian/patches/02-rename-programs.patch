@@ -84,16 +84,16 @@ Index: b/doc/sockd.conf.5
  .SH DESCRIPTION
  The configuration file for the \fBDante\fP server controls both access
  controls and logging.  It is divided into three parts; server settings,
-@@ -283,7 +283,7 @@
+@@ -315,7 +315,7 @@
  .IP \fBtimeout.io\fP
  The number of seconds an established connection can be idle.
- The default is 86400 (24 hours).  Set it to 0 for forever.
+ The default is 0, meaning forever.
 -See also the "-n" option in the sockd(8) manpage.
 +See also the "-n" option in the danted(8) manpage.
  
  Individual timeouts can be set for TCP and UDP by suffixing io with
  ".<protocolname>", i.e. \fBtimeout.io.tcp\fP or \fBtimeout.io.udp\fP.
-@@ -321,7 +321,7 @@
+@@ -353,7 +353,7 @@
  if compiled with libwrap support.  They are as follows:
  .IP \fBuser.privileged\fP
  Username which will be used for doing privileged operations.
@@ -102,7 +102,7 @@ Index: b/doc/sockd.conf.5
  the sockd.pid file (you can create it manually before starting sockd),
  have anything in your configuration that requires binding privileged
  TCP/UDP ports (ports below 1024), or use some sort of password-based
-@@ -863,7 +863,7 @@
+@@ -1081,7 +1081,7 @@
  .SH FILES
  .nf
  .ta \w 1
@@ -111,7 +111,7 @@ Index: b/doc/sockd.conf.5
  /etc/passwd       systemfile used when doing standard username/password
                    authentication.
  .fi
-@@ -872,7 +872,7 @@
+@@ -1090,7 +1090,7 @@
     Michael Shuldman
     Karl-Andre' Skevik
  .SH SEE ALSO
