@@ -1,3 +1,10 @@
+dante (1.4.1-1) trusty; urgency=low
+
+  * Imported Upstream version 1.4.1
+  * Update debian/patches after git-import-orig.
+
+ -- Darik Horn <dajhorn@vanadac.com>  Thu, 23 Oct 2014 20:18:58 -0400
+
 dante (1.4.0-1) trusty; urgency=medium
 
   * Imported Upstream version 1.4.0
