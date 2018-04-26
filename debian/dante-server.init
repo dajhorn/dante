@@ -20,6 +20,9 @@ CONFFILE=/etc/$NAME.conf
 
 test -f $DAEMON || exit 0
 
+test -f /lib/lsb/init-functions || exit 1
+. /lib/lsb/init-functions
+
 set -e
 
 # This function makes sure that the Dante server can write to the pid-file.
@@ -80,6 +83,9 @@ case "$1" in
 	start-stop-daemon --start --quiet --pidfile $PIDFILE \
 	  --exec $DAEMON -- -D
 	echo "$NAME."
+	;;
+status)
+	status_of_proc "$DAEMON" $DESC && exit 0 || exit $?
 	;;
   *)
 	N=/etc/init.d/$NAME
